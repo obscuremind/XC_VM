@@ -31,7 +31,17 @@ if (posix_getpwuid(posix_geteuid())['name'] == 'root') {
 
 		case 'ports':
 			echo 'Generating port configuration...' . "\n\n";
-			$rConfig = array('http' => array_unique(array_merge(array(CoreUtilities::$rServers[SERVER_ID]['http_broadcast_port']), (explode(',', CoreUtilities::$rServers[SERVER_ID]['http_ports_add']) ?: array()))), 'https' => array_unique(array_merge(array(CoreUtilities::$rServers[SERVER_ID]['https_broadcast_port']), (explode(',', CoreUtilities::$rServers[SERVER_ID]['https_ports_add']) ?: array()))), 'rtmp' => CoreUtilities::$rServers[SERVER_ID]['rtmp_port']);
+                        $rConfig = array('http' => array_unique(array_merge(array(CoreUtilities::$rServers[SERVER_ID]['http_broadcast_port']), (explode(',', CoreUtilities::$rServers[SERVER_ID]['http_ports_add']) ?: array()))), 'https' => array_unique(array_merge(array(CoreUtilities::$rServers[SERVER_ID]['https_broadcast_port']), (explode(',', CoreUtilities::$rServers[SERVER_ID]['https_ports_add']) ?: array()))), 'rtmp' => CoreUtilities::$rServers[SERVER_ID]['rtmp_port']);
+
+                        if (is_numeric($rConfig['rtmp'])) {
+                                $rConfig['rtmp'] = intval($rConfig['rtmp']);
+
+                                if ($rConfig['rtmp'] < 1 || 65535 < $rConfig['rtmp']) {
+                                        $rConfig['rtmp'] = null;
+                                }
+                        } else {
+                                $rConfig['rtmp'] = null;
+                        }
 
 			foreach ($rConfig as $rKey => $rPorts) {
 				if ($rKey == 'http') {
@@ -56,14 +66,20 @@ if (posix_getpwuid(posix_geteuid())['name'] == 'root') {
 							}
 						}
 						file_put_contents(MAIN_HOME . 'bin/nginx/conf/ports/https.conf', implode(' ', $rListen));
-					} else {
-						if ($rKey != 'rtmp') {
-						} else {
-							file_put_contents(MAIN_HOME . 'bin/nginx_rtmp/conf/port.conf', 'listen ' . intval($rPorts) . ';');
-						}
-					}
-				}
-			}
+                                        } else {
+                                                if ($rKey != 'rtmp') {
+                                                } else {
+                                                        if ($rPorts !== null) {
+                                                                file_put_contents(MAIN_HOME . 'bin/nginx_rtmp/conf/port.conf', 'listen ' . intval($rPorts) . ';');
+                                                        } else {
+                                                                if (file_exists(MAIN_HOME . 'bin/nginx_rtmp/conf/port.conf')) {
+                                                                        unlink(MAIN_HOME . 'bin/nginx_rtmp/conf/port.conf');
+                                                                }
+                                                        }
+                                                }
+                                        }
+                                }
+                        }
 
 			if (0 >= count($rConfig['http'])) {
 			} else {
@@ -75,10 +91,10 @@ if (posix_getpwuid(posix_geteuid())['name'] == 'root') {
 				echo 'SSL Ports: ' . implode(', ', $rConfig['https']) . "\n";
 			}
 
-			if (empty($rConfig['http'])) {
-			} else {
-				echo 'RTMP Port: ' . $rConfig['rtmp'] . "\n";
-			}
+                        if ($rConfig['rtmp'] === null) {
+                        } else {
+                                echo 'RTMP Port: ' . $rConfig['rtmp'] . "\n";
+                        }
 
 			shell_exec('sudo ' . MAIN_HOME . 'service reload 2>/dev/null');
 			echo "\n";
