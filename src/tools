@@ -75,10 +75,10 @@ if (posix_getpwuid(posix_geteuid())['name'] == 'root') {
 				echo 'SSL Ports: ' . implode(', ', $rConfig['https']) . "\n";
 			}
 
-			if (empty($rConfig['http'])) {
-			} else {
-				echo 'RTMP Port: ' . $rConfig['rtmp'] . "\n";
-			}
+                        if (empty($rConfig['rtmp'])) {
+                        } else {
+                                echo 'RTMP Port: ' . $rConfig['rtmp'] . "\n";
+                        }
 
 			shell_exec('sudo ' . MAIN_HOME . 'service reload 2>/dev/null');
 			echo "\n";
