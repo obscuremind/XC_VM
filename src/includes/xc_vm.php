@@ -41,6 +41,9 @@ class CoreUtilities {
 		}
 		if ($rUseCache) {
 			self::$rSettings = self::getCache('settings');
+			if (!is_array(self::$rSettings) || empty(self::$rSettings)) {
+				self::$rSettings = self::getSettings(true);
+			}
 		} else {
 			self::$rSettings = self::getSettings();
 		}
@@ -84,15 +87,45 @@ class CoreUtilities {
 		self::$rCached = self::$rSettings['enable_cache'];
 		if ($rUseCache) {
 			self::$rServers = self::getCache('servers');
+			if (self::$rServers === false) {
+				self::$rServers = self::getServers(true);
+			}
 			self::$rBouquets = self::getCache('bouquets');
+			if (self::$rBouquets === false) {
+				self::$rBouquets = self::getBouquets(true);
+			}
 			self::$rBlockedUA = self::getCache('blocked_ua');
+			if (self::$rBlockedUA === false) {
+				self::$rBlockedUA = self::getBlockedUA(true);
+			}
 			self::$rBlockedISP = self::getCache('blocked_isp');
+			if (self::$rBlockedISP === false) {
+				self::$rBlockedISP = self::getBlockedISP(true);
+			}
 			self::$rBlockedIPs = self::getCache('blocked_ips');
+			if (self::$rBlockedIPs === false) {
+				self::$rBlockedIPs = self::getBlockedIPs(true);
+			}
 			self::$rProxies = self::getCache('proxy_servers');
+			if (self::$rProxies === false) {
+				self::$rProxies = self::getProxyIPs(true);
+			}
 			self::$rBlockedServers = self::getCache('blocked_servers');
+			if (self::$rBlockedServers === false) {
+				self::$rBlockedServers = self::getBlockedServers(true);
+			}
 			self::$rAllowedDomains = self::getCache('allowed_domains');
+			if (self::$rAllowedDomains === false) {
+				self::$rAllowedDomains = self::getAllowedDomains(true);
+			}
 			self::$rAllowedIPs = self::getCache('allowed_ips');
+			if (self::$rAllowedIPs === false) {
+				self::$rAllowedIPs = self::getAllowedIPs(true);
+			}
 			self::$rCategories = self::getCache('categories');
+			if (self::$rCategories === false) {
+				self::$rCategories = self::getCategories(null, true);
+			}
 		} else {
 			self::$rServers = self::getServers();
 			self::$rBouquets = self::getBouquets();
@@ -150,7 +183,7 @@ class CoreUtilities {
 	public static function getProxyIPs($rForce = false) {
 		if (!$rForce) {
 			$rCache = self::getCache('proxy_servers', 20);
-			if ($rCache === true) {
+			if ($rCache !== false) {
 				return $rCache;
 			}
 		}
