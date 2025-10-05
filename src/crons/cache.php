@@ -19,6 +19,35 @@ if (posix_getpwuid(posix_geteuid())['name'] == 'xc_vm') {
 } else {
     exit('Please run as XC_VM!' . "\n");
 }
+if (!function_exists('xcvm_delete_path')) {
+    function xcvm_delete_path($rPath)
+    {
+        if (is_link($rPath) || is_file($rPath)) {
+            if (file_exists($rPath) || is_link($rPath)) {
+                unlink($rPath);
+            }
+
+            return;
+        }
+
+        if (!is_dir($rPath)) {
+            return;
+        }
+
+        $rItems = scandir($rPath);
+
+        if ($rItems === false) {
+            return;
+        }
+
+        foreach (array_diff($rItems, array('.', '..')) as $rItem) {
+            $rItemPath = rtrim($rPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $rItem;
+            xcvm_delete_path($rItemPath);
+        }
+
+        rmdir($rPath);
+    }
+}
 function loadCron() {
     global $db;
     global $rStartup;
@@ -30,8 +59,19 @@ function loadCron() {
             } else {
                 echo 'Clearing cache...' . "\n\n";
                 foreach (array(STREAMS_TMP_PATH, LINES_TMP_PATH, SERIES_TMP_PATH) as $rTmpPath) {
-                    foreach (scandir($rTmpPath) as $rFile) {
-                        unlink($rTmpPath . $rFile);
+                    if (!is_dir($rTmpPath)) {
+                        continue;
+                    }
+
+                    $rEntries = scandir($rTmpPath);
+
+                    if ($rEntries === false) {
+                        continue;
+                    }
+
+                    foreach (array_diff($rEntries, array('.', '..')) as $rFile) {
+                        $rFullPath = rtrim($rTmpPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $rFile;
+                        xcvm_delete_path($rFullPath);
                     }
                 }
                 exec('sudo rm -rf ' . TMP_PATH . '*');
