@@ -67,21 +67,24 @@ function loadapi() {
 			$rReturn = array('result' => true, 'streams' => array());
 			exec('ls -l ' . STREAMS_PATH, $rFiles);
 
-			foreach ($rFiles as $rFile) {
-				$rSplit = explode(' ', preg_replace('!\\s+!', ' ', $rFile));
-				$rFileSplit = explode('_', $rSplit[count($rSplit) - 1]);
+                        foreach ($rFiles as $rFile) {
+                                $rSplit = explode(' ', preg_replace('!\\s+!', ' ', $rFile));
+                                $rFileSplit = explode('_', $rSplit[count($rSplit) - 1]);
 
-				if (count($rFileSplit) != 2) {
-				} else {
-					$rStreamID = intval($rFileSplit[0]);
-					$rFileSize = intval($rSplit[4]);
+                                if (count($rFileSplit) != 2) {
+                                } else {
+                                        $rStreamID = intval($rFileSplit[0]);
+                                        $rFileSize = intval($rSplit[4]);
 
-					if (!(0 < $rStreamID & 0 < $rFileSize)) {
-					} else {
-						$rReturn['streams'][$rStreamID] += $rFileSize;
-					}
-				}
-			}
+                                        if ($rStreamID > 0 && $rFileSize > 0) {
+                                                if (!isset($rReturn['streams'][$rStreamID])) {
+                                                        $rReturn['streams'][$rStreamID] = 0;
+                                                }
+
+                                                $rReturn['streams'][$rStreamID] += $rFileSize;
+                                        }
+                                }
+                        }
 			echo json_encode($rReturn);
 
 			exit();
