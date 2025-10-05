@@ -336,15 +336,10 @@ class API {
 			}
 
 			if (!($rData['keygen'] != 'HMAC KEY HIDDEN' && strlen($rData['keygen']) != 32)) {
-
-
 				if (strlen($rData['notes']) != 0) {
-
-
 					if (isset($rData['edit'])) {
-						if ($rData['keygen'] == 'HMAC KEY HIDDEN') {
-						} else {
-							self::$db->query('SELECT `id` FROM `hmac_keys` WHERE `key` = ? AND `id` <> ?;', CoreUtilities::encryptData($rData['keygen'], OPENSSL_EXTRA), $rData['edit']);
+						if ($rData['keygen'] != 'HMAC KEY HIDDEN') {
+							self::$db->query('SELECT `id` FROM `hmac_keys` WHERE `key` = ? AND `id` <> ?;', CoreUtilities::encryptData($rData['keygen'], CoreUtilities::$rSettings['live_streaming_pass'], OPENSSL_EXTRA), $rData['edit']);
 
 							if (0 >= self::$db->num_rows()) {
 							} else {
@@ -352,7 +347,7 @@ class API {
 							}
 						}
 					} else {
-						self::$db->query('SELECT `id` FROM `hmac_keys` WHERE `key` = ?;', CoreUtilities::encryptData($rData['keygen'], OPENSSL_EXTRA));
+						self::$db->query('SELECT `id` FROM `hmac_keys` WHERE `key` = ?;', CoreUtilities::encryptData($rData['keygen'], CoreUtilities::$rSettings['live_streaming_pass'], OPENSSL_EXTRA));
 
 						if (0 >= self::$db->num_rows()) {
 						} else {
@@ -360,9 +355,8 @@ class API {
 						}
 					}
 
-					if ($rData['keygen'] == 'HMAC KEY HIDDEN') {
-					} else {
-						$rArray['key'] = CoreUtilities::encryptData($rData['keygen'], OPENSSL_EXTRA);
+					if ($rData['keygen'] != 'HMAC KEY HIDDEN') {
+						$rArray['key'] = CoreUtilities::encryptData($rData['keygen'], CoreUtilities::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
 					}
 
 					$rPrepare = prepareArray($rArray);
@@ -373,16 +367,12 @@ class API {
 
 						return array('status' => STATUS_SUCCESS, 'data' => array('insert_id' => $rInsertID));
 					}
-
 					return array('status' => STATUS_FAILURE, 'data' => $rData);
 				}
-
 				return array('status' => STATUS_NO_DESCRIPTION, 'data' => $rData);
 			}
-
 			return array('status' => STATUS_NO_KEY, 'data' => $rData);
 		}
-
 		return array('status' => STATUS_INVALID_INPUT, 'data' => $rData);
 	}
 
@@ -3358,11 +3348,11 @@ class API {
 							return array('status' => STATUS_SUCCESS, 'data' => array('insert_id' => $rInsertID));
 						} else {
 							foreach ($rBouquetCreate as $rBouquet => $rID) {
-								$db->query('DELETE FROM `bouquets` WHERE `id` = ?;', $rID);
+								self::$db->query('DELETE FROM `bouquets` WHERE `id` = ?;', $rID);
 							}
 
 							foreach ($rCategoryCreate as $rCategory => $rID) {
-								$db->query('DELETE FROM `streams_categories` WHERE `id` = ?;', $rID);
+								self::$db->query('DELETE FROM `streams_categories` WHERE `id` = ?;', $rID);
 							}
 
 							return array('status' => STATUS_FAILURE, 'data' => $rData);
@@ -4209,11 +4199,11 @@ class API {
 				return array('status' => STATUS_SUCCESS, 'data' => array('insert_id' => $rInsertID));
 			} else {
 				foreach ($rBouquetCreate as $rBouquet => $rID) {
-					$db->query('DELETE FROM `bouquets` WHERE `id` = ?;', $rID);
+					self::$db->query('DELETE FROM `bouquets` WHERE `id` = ?;', $rID);
 				}
 
 				foreach ($rCategoryCreate as $rCategory => $rID) {
-					$db->query('DELETE FROM `streams_categories` WHERE `id` = ?;', $rID);
+					self::$db->query('DELETE FROM `streams_categories` WHERE `id` = ?;', $rID);
 				}
 
 				return array('status' => STATUS_FAILURE, 'data' => $rData);
@@ -4694,7 +4684,7 @@ class API {
 			}
 			$rArray = verifyPostTable('settings', $rData, true);
 
-			foreach (array('php_loopback', 'restreamer_bypass_proxy', 'request_prebuffer', 'modal_edit', 'group_buttons', 'enable_search', 'on_demand_checker', 'ondemand_balance_equal', 'disable_mag_token', 'allow_cdn_access', 'dts_legacy_ffmpeg', 'mag_load_all_channels', 'disable_xmltv_restreamer', 'disable_playlist_restreamer', 'ffmpeg_warnings', 'auto_send_logs', 'reseller_ssl_domain', 'extract_subtitles', 'show_category_duplicates', 'vod_sort_newest', 'header_stats', 'mag_keep_extension', 'keep_protocol', 'read_native_hls', 'player_allow_playlist', 'player_allow_bouquet', 'player_hide_incompatible', 'player_allow_hevc', 'force_epg_timezone', 'check_vod', 'ignore_keyframes', 'save_login_logs', 'save_restart_logs', 'mag_legacy_redirect', 'restrict_playlists', 'monitor_connection_status', 'kill_rogue_ffmpeg', 'show_images', 'on_demand_instant_off', 'on_demand_failure_exit', 'playlist_from_mysql', 'ignore_invalid_users', 'legacy_mag_auth', 'ministra_allow_blank', 'block_proxies', 'block_streaming_servers', 'ip_subnet_match', 'debug_show_errors', 'restart_php_fpm', 'restream_deny_unauthorised', 'api_probe', 'legacy_panel_api', 'hide_failures', 'verify_host', 'encrypt_playlist', 'encrypt_playlist_restreamer', 'mag_disable_ssl', 'legacy_get', 'legacy_xmltv', 'save_closed_connection', 'show_tickets', 'stream_logs_save', 'client_logs_save', 'streams_grouped', 'cloudflare', 'cleanup', 'dashboard_stats', 'dashboard_status', 'dashboard_map', 'dashboard_display_alt', 'recaptcha_enable', 'ip_logout', 'disable_player_api', 'disable_playlist', 'disable_xmltv', 'disable_enigma2', 'disable_ministra', 'enable_isp_lock', 'block_svp', 'disable_ts', 'disable_ts_allow_restream', 'disable_hls', 'disable_hls_allow_restream', 'disable_rtmp', 'disable_rtmp_allow_restream', 'case_sensitive_line', 'county_override_1st', 'disallow_2nd_ip_con', 'use_mdomain_in_lists', 'encrypt_hls', 'disallow_empty_user_agents', 'detect_restream_block_user', 'download_images', 'api_redirect', 'use_buffer', 'audio_restart_loss', 'show_isps', 'priority_backup', 'rtmp_random', 'show_connected_video', 'show_not_on_air_video', 'show_banned_video', 'show_expired_video', 'show_expiring_video', 'show_all_category_mag', 'always_enabled_subtitles', 'enable_connection_problem_indication', 'show_tv_channel_logo', 'show_channel_logo_in_preview', 'disable_trial', 'restrict_same_ip', 'js_navigate') as $rSetting) {
+			foreach (array('php_loopback', 'restreamer_bypass_proxy', 'request_prebuffer', 'modal_edit', 'group_buttons', 'enable_search', 'on_demand_checker', 'ondemand_balance_equal', 'disable_mag_token', 'allow_cdn_access', 'dts_legacy_ffmpeg', 'mag_load_all_channels', 'disable_xmltv_restreamer', 'disable_playlist_restreamer', 'ffmpeg_warnings', 'reseller_ssl_domain', 'extract_subtitles', 'show_category_duplicates', 'vod_sort_newest', 'header_stats', 'mag_keep_extension', 'keep_protocol', 'read_native_hls', 'player_allow_playlist', 'player_allow_bouquet', 'player_hide_incompatible', 'player_allow_hevc', 'force_epg_timezone', 'check_vod', 'ignore_keyframes', 'save_login_logs', 'save_restart_logs', 'mag_legacy_redirect', 'restrict_playlists', 'monitor_connection_status', 'kill_rogue_ffmpeg', 'show_images', 'on_demand_instant_off', 'on_demand_failure_exit', 'playlist_from_mysql', 'ignore_invalid_users', 'legacy_mag_auth', 'ministra_allow_blank', 'block_proxies', 'block_streaming_servers', 'ip_subnet_match', 'debug_show_errors', 'restart_php_fpm', 'restream_deny_unauthorised', 'api_probe', 'legacy_panel_api', 'hide_failures', 'verify_host', 'encrypt_playlist', 'encrypt_playlist_restreamer', 'mag_disable_ssl', 'legacy_get', 'legacy_xmltv', 'save_closed_connection', 'show_tickets', 'stream_logs_save', 'client_logs_save', 'streams_grouped', 'cloudflare', 'cleanup', 'dashboard_stats', 'dashboard_status', 'dashboard_map', 'dashboard_display_alt', 'recaptcha_enable', 'ip_logout', 'disable_player_api', 'disable_playlist', 'disable_xmltv', 'disable_enigma2', 'disable_ministra', 'enable_isp_lock', 'block_svp', 'disable_ts', 'disable_ts_allow_restream', 'disable_hls', 'disable_hls_allow_restream', 'disable_rtmp', 'disable_rtmp_allow_restream', 'case_sensitive_line', 'county_override_1st', 'disallow_2nd_ip_con', 'use_mdomain_in_lists', 'encrypt_hls', 'disallow_empty_user_agents', 'detect_restream_block_user', 'download_images', 'api_redirect', 'use_buffer', 'audio_restart_loss', 'show_isps', 'priority_backup', 'rtmp_random', 'show_connected_video', 'show_not_on_air_video', 'show_banned_video', 'show_expired_video', 'show_expiring_video', 'show_all_category_mag', 'always_enabled_subtitles', 'enable_connection_problem_indication', 'show_tv_channel_logo', 'show_channel_logo_in_preview', 'disable_trial', 'restrict_same_ip', 'js_navigate') as $rSetting) {
 				if (isset($rData[$rSetting])) {
 					$rArray[$rSetting] = 1;
 				} else {
@@ -5905,11 +5895,11 @@ class API {
 							CoreUtilities::updateStream($rInsertID);
 						} else {
 							foreach ($rBouquetCreate as $rBouquet => $rID) {
-								$db->query('DELETE FROM `bouquets` WHERE `id` = ?;', $rID);
+								self::$db->query('DELETE FROM `bouquets` WHERE `id` = ?;', $rID);
 							}
 
 							foreach ($rCategoryCreate as $rCategory => $rID) {
-								$db->query('DELETE FROM `streams_categories` WHERE `id` = ?;', $rID);
+								self::$db->query('DELETE FROM `streams_categories` WHERE `id` = ?;', $rID);
 							}
 
 							return array('status' => STATUS_FAILURE, 'data' => $rData);
@@ -5946,8 +5936,7 @@ class API {
 		if (self::checkMinimumRequirements($rData)) {
 			$rPostServers = json_decode($rData['server_order'], true);
 
-			if (0 >= count($rPostServers)) {
-			} else {
+			if (count($rPostServers) > 0) {
 				foreach ($rPostServers as $rOrder => $rPostServer) {
 					self::$db->query('UPDATE `servers` SET `order` = ? WHERE `id` = ?;', intval($rOrder) + 1, $rPostServer['id']);
 				}

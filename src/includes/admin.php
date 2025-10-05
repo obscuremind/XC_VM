@@ -85,7 +85,6 @@ $allServers = getAllServers();
 $rServers = getStreamingServers();
 $rSettings = CoreUtilities::$rSettings;
 $rProxyServers = getProxyServers();
-$rUpdate = json_decode($rSettings['update_data'], true);
 
 uasort(
 	$rServers,
@@ -3727,6 +3726,9 @@ function getStreamingServers() {
 			}
 
 			$rRow['server_online'] = in_array($rRow['status'], array(1, 3)) && time() - $rRow['last_check_ago'] <= 90 || $rRow['is_main'];
+			if (!isset($rRow['order'])) {
+				$rRow['order'] = 0;
+			}
 			if ($rRow['server_online']) {
 				$rReturn[$rRow['id']] = $rRow;
 			}
@@ -3740,9 +3742,9 @@ function getAllServers() {
 	$rReturn = array();
 	$db->query('SELECT * FROM `servers` ORDER BY `id` ASC;');
 
-	if (0 >= $db->num_rows()) {
-	} else {
+	if ($db->num_rows() > 0) {
 		foreach ($db->get_rows() as $rRow) {
+			$rRow['server_online'] = in_array($rRow['status'], array(1, 3)) && time() - $rRow['last_check_ago'] <= 90 || $rRow['is_main'];
 			$rReturn[$rRow['id']] = $rRow;
 		}
 	}

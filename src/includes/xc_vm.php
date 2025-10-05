@@ -354,6 +354,9 @@ class CoreUtilities {
 			}
 			$rRow['watchdog'] = json_decode($rRow['watchdog_data'], true);
 			$rRow['server_online'] = $rRow['enabled'] && in_array($rRow['status'], $rOnlineStatus) && time() - $rRow['last_check_ago'] <= $rLastCheckTime || SERVER_ID == $rRow['id'];
+			if (!isset($rRow['order'])) {
+				$rRow['order'] = 0;
+			}
 			$rServers[intval($rRow['id'])] = $rRow;
 		}
 		self::setCache('servers', $rServers);
@@ -3091,27 +3094,22 @@ class CoreUtilities {
 		if (!$rCertificate) {
 			$rConfig = explode("\n", file_get_contents(BIN_PATH . 'nginx/conf/ssl.conf'));
 			foreach ($rConfig as $rLine) {
-				if (stripos($rLine, 'ssl_certificate ') === true) {
+				if (stripos($rLine, 'ssl_certificate ') !== false) {
 					$rCertificate = rtrim(trim(explode('ssl_certificate ', $rLine)[1]), ';');
 					break;
 				}
 			}
 		}
-		if (!$rCertificate) {
-		} else {
+		if ($rCertificate) {
 			$rReturn['path'] = pathinfo($rCertificate)['dirname'];
 			exec('openssl x509 -serial -enddate -subject -noout -in ' . escapeshellarg($rCertificate), $rOutput, $rReturnVar);
 			foreach ($rOutput as $rLine) {
 				if (stripos($rLine, 'serial=') !== false) {
 					$rReturn['serial'] = trim(explode('serial=', $rLine)[1]);
-				} else {
-					if (stripos($rLine, 'subject=') !== false) {
-						$rReturn['subject'] = trim(explode('subject=', $rLine)[1]);
-					} else {
-						if (stripos($rLine, 'notAfter=') === true) {
-							$rReturn['expiration'] = strtotime(trim(explode('notAfter=', $rLine)[1]));
-						}
-					}
+				} elseif (stripos($rLine, 'subject=') !== false) {
+					$rReturn['subject'] = trim(explode('subject=', $rLine)[1]);
+				} elseif (stripos($rLine, 'notAfter=') !== false) {
+					$rReturn['expiration'] = strtotime(trim(explode('notAfter=', $rLine)[1]));
 				}
 			}
 		}
@@ -4185,15 +4183,15 @@ class CoreUtilities {
 	}
 
 	public static function createBackup($Filename) {
-		shell_exec("mysqldump -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " --no-data " . self::$rConfig['database'] . " > \"" . $Filename . "\"");
-		shell_exec("mysqldump -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " --no-create-info --ignore-table xc_vm.detect_restream_logs --ignore-table xc_vm.epg_data --ignore-table xc_vm.lines_activity --ignore-table xc_vm.lines_live --ignore-table xc_vm.lines_logs --ignore-table xc_vm.login_logs --ignore-table xc_vm.mag_claims --ignore-table xc_vm.mag_logs --ignore-table xc_vm.mysql_syslog --ignore-table xc_vm.panel_logs --ignore-table xc_vm.panel_stats --ignore-table xc_vm.servers_stats --ignore-table xc_vm.signals --ignore-table xc_vm.streams_errors --ignore-table xc_vm.streams_logs --ignore-table xc_vm.streams_stats --ignore-table xc_vm.syskill_log --ignore-table xc_vm.users_credits_logs --ignore-table xc_vm.users_logs --ignore-table xc_vm.watch_logs " . self::$rConfig['database'] . " >> \"" . $Filename . "\"");
+		shell_exec("mysqldump -h 127.0.0.1 -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " --no-data " . self::$rConfig['database'] . " > \"" . $Filename . "\"");
+		shell_exec("mysqldump -h 127.0.0.1 -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " --no-create-info --ignore-table xc_vm.detect_restream_logs --ignore-table xc_vm.epg_data --ignore-table xc_vm.lines_activity --ignore-table xc_vm.lines_live --ignore-table xc_vm.lines_logs --ignore-table xc_vm.login_logs --ignore-table xc_vm.mag_claims --ignore-table xc_vm.mag_logs --ignore-table xc_vm.mysql_syslog --ignore-table xc_vm.panel_logs --ignore-table xc_vm.panel_stats --ignore-table xc_vm.servers_stats --ignore-table xc_vm.signals --ignore-table xc_vm.streams_errors --ignore-table xc_vm.streams_logs --ignore-table xc_vm.streams_stats --ignore-table xc_vm.syskill_log --ignore-table xc_vm.users_credits_logs --ignore-table xc_vm.users_logs --ignore-table xc_vm.watch_logs " . self::$rConfig['database'] . " >> \"" . $Filename . "\"");
 	}
 
 	public static function restoreBackup($Filename) {
 		shell_exec("mysql -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " " . self::$rConfig['database'] . " -e \"DROP DATABASE IF EXISTS xc_vm; CREATE DATABASE IF NOT EXISTS xc_vm;\"");
 		shell_exec("mysql -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " " . self::$rConfig['database'] . " < \"" . $Filename . "\" > /dev/null 2>/dev/null &");
-		shell_exec("mysqldump -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " --no-data " . self::$rConfig['database'] . " > \"" . $Filename . "\"");
-		shell_exec("mysqldump -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " --no-create-info --ignore-table xc_vm.detect_restream_logs --ignore-table xc_vm.epg_data --ignore-table xc_vm.lines_activity --ignore-table xc_vm.lines_live --ignore-table xc_vm.lines_logs --ignore-table xc_vm.login_logs --ignore-table xc_vm.mag_claims --ignore-table xc_vm.mag_logs --ignore-table xc_vm.mysql_syslog --ignore-table xc_vm.panel_logs --ignore-table xc_vm.panel_stats --ignore-table xc_vm.servers_stats --ignore-table xc_vm.signals --ignore-table xc_vm.streams_errors --ignore-table xc_vm.streams_logs --ignore-table xc_vm.streams_stats --ignore-table xc_vm.syskill_log --ignore-table xc_vm.users_credits_logs --ignore-table xc_vm.users_logs --ignore-table xc_vm.watch_logs " . self::$rConfig['database'] . " >> \"" . $Filename . "\"");
+		shell_exec("mysqldump -h 127.0.0.1 -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " --no-data " . self::$rConfig['database'] . " > \"" . $Filename . "\"");
+		shell_exec("mysqldump -h 127.0.0.1 -u " . self::$rConfig['username'] . " -p" . self::$rConfig['password'] . " -P " . self::$rConfig['port'] . " --no-create-info --ignore-table xc_vm.detect_restream_logs --ignore-table xc_vm.epg_data --ignore-table xc_vm.lines_activity --ignore-table xc_vm.lines_live --ignore-table xc_vm.lines_logs --ignore-table xc_vm.login_logs --ignore-table xc_vm.mag_claims --ignore-table xc_vm.mag_logs --ignore-table xc_vm.mysql_syslog --ignore-table xc_vm.panel_logs --ignore-table xc_vm.panel_stats --ignore-table xc_vm.servers_stats --ignore-table xc_vm.signals --ignore-table xc_vm.streams_errors --ignore-table xc_vm.streams_logs --ignore-table xc_vm.streams_stats --ignore-table xc_vm.syskill_log --ignore-table xc_vm.users_credits_logs --ignore-table xc_vm.users_logs --ignore-table xc_vm.watch_logs " . self::$rConfig['database'] . " >> \"" . $Filename . "\"");
 	}
 
 	public static function grantPrivileges($Host) {
