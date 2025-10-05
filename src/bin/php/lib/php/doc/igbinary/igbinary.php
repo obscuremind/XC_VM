@@ -53,7 +53,12 @@
  * @return string Returns a string containing a binary representation of value that can be stored anywhere.
  * @link http://www.php.net/serialize PHP's default serialize
  */
-function igbinary_serialize($value);
+if (!function_exists('igbinary_serialize')) {
+    function igbinary_serialize($value)
+    {
+        return '';
+    }
+}
 
 /** Creates a PHP value from a stored representation.
  * igbinary_unserialize() takes a single serialized variable and converts it back into a PHP value.
@@ -70,4 +75,9 @@ function igbinary_serialize($value);
  * @link http://www.php.net/manual/en/function.unserialize.php PHP's default unserialize
  * @link https://secure.php.net/serializable Serializable interface
  */
-function igbinary_unserialize($str);
+if (!function_exists('igbinary_unserialize')) {
+    function igbinary_unserialize($str)
+    {
+        return null;
+    }
+}
