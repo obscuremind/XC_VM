@@ -2,47 +2,50 @@
 
 $rSessionTimeout = 60;
 
-if (defined('TMP_PATH')) {
-} else {
-	define('TMP_PATH', '/home/xc_vm/tmp/');
+if (!defined('TMP_PATH')) {
+        define('TMP_PATH', '/home/xc_vm/tmp/');
 }
 
-if (session_status() != PHP_SESSION_NONE) {
-} else {
-	session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
 }
 
-if (!(isset($_SESSION['reseller']) && isset($_SESSION['rlast_activity']) && $rSessionTimeout * 60 < time() - $_SESSION['rlast_activity'])) {
-} else {
-	foreach (array('reseller', 'rip', 'rcode', 'rverify', 'rlast_activity') as $rKey) {
-		if (!isset($_SESSION[$rKey])) {
-		} else {
-			unset($_SESSION[$rKey]);
-		}
-	}
+$hasExpiredSession = isset($_SESSION['reseller'], $_SESSION['rlast_activity'])
+        && (time() - (int) $_SESSION['rlast_activity']) > ($rSessionTimeout * 60);
 
-	if (session_status() !== PHP_SESSION_NONE) {
-	} else {
-		session_start();
-	}
+if ($hasExpiredSession) {
+        foreach (array('reseller', 'rip', 'rcode', 'rverify', 'rlast_activity') as $sessionKey) {
+                unset($_SESSION[$sessionKey]);
+        }
+
+        session_regenerate_id(true);
 }
 
 if (!isset($_SESSION['reseller'])) {
-	if (basename(__FILE__) == basename($_SERVER['SCRIPT_FILENAME'])) {
-		echo json_encode(array('result' => false));
+        if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
+                echo json_encode(array('result' => false));
 
-		exit();
-	}
+                exit();
+        }
 
-	header('Location: login?referrer=' . urlencode(basename($_SERVER['REQUEST_URI'], '.php')));
+        $requestPath = '';
 
-	exit();
+        if (!empty($_SERVER['REQUEST_URI'])) {
+                $requestPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?? '';
+        }
+
+        $requestPath = $requestPath !== '' ? basename($requestPath, '.php') : '';
+        $referrerSuffix = $requestPath !== '' ? '?referrer=' . rawurlencode($requestPath) : '';
+
+        header('Location: login' . $referrerSuffix);
+
+        exit();
 }
 
-if (basename(__FILE__) == basename($_SERVER['SCRIPT_FILENAME'])) {
-	echo json_encode(array('result' => true));
+if (basename(__FILE__) === basename($_SERVER['SCRIPT_FILENAME'])) {
+        echo json_encode(array('result' => true));
 
-	exit();
+        exit();
 }
 
 $_SESSION['rlast_activity'] = time();

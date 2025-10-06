@@ -79,41 +79,65 @@ define('FFPROBE_BIN_71', BIN_PATH . 'ffmpeg_bin/7.1/ffprobe');
 define('FFPROBE_BIN_80', BIN_PATH . 'ffmpeg_bin/8.0/ffprobe');
 
 $_INFO = array();
+$rSettings = array('debug_show_errors' => false);
 
-if (file_exists(MAIN_HOME . 'config')) {
-    $_INFO = parse_ini_file(CONFIG_PATH . 'config.ini');
+$rConfigFile = CONFIG_PATH . 'config.ini';
+
+if (is_file($rConfigFile)) {
+        $rConfig = @parse_ini_file($rConfigFile);
+
+        if (is_array($rConfig)) {
+                $_INFO = $rConfig;
+        } else {
+                die('invalid config file');
+        }
 } else {
-    die('no config found');
+        die('no config found');
 }
 
-$rShowErrors = false;
+$rSettingsFile = CACHE_TMP_PATH . 'settings';
+
+if (is_readable($rSettingsFile)) {
+        $rSettingsData = file_get_contents($rSettingsFile);
+
+        if ($rSettingsData !== false && $rSettingsData !== '') {
+                $rDecodedSettings = (function_exists('igbinary_unserialize') ? @igbinary_unserialize($rSettingsData) : false);
+
+                if (is_array($rDecodedSettings)) {
+                        $rSettings = array_merge($rSettings, $rDecodedSettings);
+                }
+        }
+}
+
+$rShowErrors = !empty($rSettings['debug_show_errors']);
 
 if (!isset($_SERVER['argc'])) {
-	$rIP = $_SERVER['REMOTE_ADDR'];
-	if (empty($rIP) || !file_exists(FLOOD_TMP_PATH . 'block_' . $rIP)) {
-		define('HOST', trim(explode(':', $_SERVER['HTTP_HOST'])[0]));
+        $rIP = ($_SERVER['REMOTE_ADDR'] ?? '');
+        if (empty($rIP) || !file_exists(FLOOD_TMP_PATH . 'block_' . $rIP)) {
+                $rHostHeader = ($_SERVER['HTTP_HOST'] ?? '');
+                $rHostName = trim(explode(':', $rHostHeader)[0]);
 
-		if (file_exists(CACHE_TMP_PATH . 'settings')) {
-			$rData = file_get_contents(CACHE_TMP_PATH . 'settings');
-			$rSettings = igbinary_unserialize($rData);
+                if ($rHostName === '') {
+                        $rHostName = 'localhost';
+                }
 
-			if (is_array($rSettings) && file_exists(CACHE_TMP_PATH . 'allowed_domains') && $rSettings['verify_host']) {
-				$rData = file_get_contents(CACHE_TMP_PATH . 'allowed_domains');
-				$rAllowedDomains = igbinary_unserialize($rData);
+                if (!defined('HOST')) {
+                        define('HOST', $rHostName);
+                }
 
-				if (!(is_array($rAllowedDomains) && !in_array(HOST, $rAllowedDomains) && HOST != 'xc_vm') || filter_var(HOST, FILTER_VALIDATE_IP)) {
-				} else {
-					generateerror('INVALID_HOST');
-				}
-			}
+                if (!empty($rSettings['verify_host']) && is_readable(CACHE_TMP_PATH . 'allowed_domains')) {
+                        $rData = file_get_contents(CACHE_TMP_PATH . 'allowed_domains');
+                        $rAllowedDomains = (function_exists('igbinary_unserialize') ? @igbinary_unserialize($rData) : false);
 
-			$rShowErrors = (isset($rSettings['debug_show_errors']) ? $rSettings['debug_show_errors'] : false);
-		}
-	} else {
-		http_response_code(403);
+                        if (is_array($rAllowedDomains) && !filter_var(HOST, FILTER_VALIDATE_IP) && HOST !== 'xc_vm' && !in_array(HOST, $rAllowedDomains, true)) {
+                                generateError('INVALID_HOST');
+                        }
+                }
+        } else {
+                http_response_code(403);
 
-		exit();
-	}
+                exit();
+        }
 }
 
 define('PHP_ERRORS', $rShowErrors);
@@ -156,15 +180,15 @@ function panelLog($rType, $rMessage, $rExtra = '', $rLine = 0) {
 }
 
 function generateError($rError, $rKill = true) {
-	global $rErrorCodes;
-	global $rSettings;
+        global $rErrorCodes;
+        global $rSettings;
 
-	if ($rSettings['debug_show_errors']) {
-		$rErrorDescription = ($rErrorCodes[$rError] ?: '');
-		$rStyle = '*{-webkit-box-sizing:border-box;box-sizing:border-box}body{padding:0;margin:0}#notfound{position:relative;height:100vh}#notfound .notfound{position:absolute;left:50%;top:50%;-webkit-transform:translate(-50%,-50%);-ms-transform:translate(-50%,-50%);transform:translate(-50%,-50%)}.notfound{max-width:520px;width:100%;line-height:1.4;text-align:center}.notfound .notfound-404{position:relative;height:200px;margin:0 auto 20px;z-index:-1}.notfound .notfound-404 h1{font-family:Montserrat,sans-serif;font-size:236px;font-weight:200;margin:0;color:#211b19;text-transform:uppercase;position:absolute;left:50%;top:50%;-webkit-transform:translate(-50%,-50%);-ms-transform:translate(-50%,-50%);transform:translate(-50%,-50%)}.notfound .notfound-404 h2{font-family:Montserrat,sans-serif;font-size:28px;font-weight:400;text-transform:uppercase;color:#211b19;background:#fff;padding:10px 5px;margin:auto;display:inline-block;position:absolute;bottom:0;left:0;right:0}.notfound p{font-family:Montserrat,sans-serif;font-size:14px;font-weight:300;text-transform:uppercase}@media only screen and (max-width:767px){.notfound .notfound-404 h1{font-size:148px}}@media only screen and (max-width:480px){.notfound .notfound-404{height:148px;margin:0 auto 10px}.notfound .notfound-404 h1{font-size:86px}.notfound .notfound-404 h2{font-size:16px}}';
-		echo '<html><head><title>XC_VM - Debug Mode</title><link href="https://fonts.googleapis.com/css?family=Montserrat:200,400,700" rel="stylesheet"><style>' . $rStyle . '</style></head><body><div id="notfound"><div class="notfound"><div class="notfound-404"><h1>XC_VM</h1><h2>' . $rError . '</h2><br/></div><p>' . $rErrorDescription . '</p></div></div></body></html>';
+        if (!empty($rSettings['debug_show_errors'])) {
+                $rErrorDescription = ($rErrorCodes[$rError] ?? '');
+                $rStyle = '*{-webkit-box-sizing:border-box;box-sizing:border-box}body{padding:0;margin:0}#notfound{position:relative;height:100vh}#notfound .notfound{position:absolute;left:50%;top:50%;-webkit-transform:translate(-50%,-50%);-ms-transform:translate(-50%,-50%);transform:translate(-50%,-50%)}.notfound{max-width:520px;width:100%;line-height:1.4;text-align:center}.notfound .notfound-404{position:relative;height:200px;margin:0 auto 20px;z-index:-1}.notfound .notfound-404 h1{font-family:Montserrat,sans-serif;font-size:236px;font-weight:200;margin:0;color:#211b19;text-transform:uppercase;position:absolute;left:50%;top:50%;-webkit-transform:translate(-50%,-50%);-ms-transform:translate(-50%,-50%);transform:translate(-50%,-50%)}.notfound .notfound-404 h2{font-family:Montserrat,sans-serif;font-size:28px;font-weight:400;text-transform:uppercase;color:#211b19;background:#fff;padding:10px 5px;margin:auto;display:inline-block;position:absolute;bottom:0;left:0;right:0}.notfound p{font-family:Montserrat,sans-serif;font-size:14px;font-weight:300;text-transform:uppercase}@media only screen and (max-width:767px){.notfound .notfound-404 h1{font-size:148px}}@media only screen and (max-width:480px){.notfound .notfound-404{height:148px;margin:0 auto 10px}.notfound .notfound-404 h1{font-size:86px}.notfound .notfound-404 h2{font-size:16px}}';
+                echo '<html><head><title>XC_VM - Debug Mode</title><link href="https://fonts.googleapis.com/css?family=Montserrat:200,400,700" rel="stylesheet"><style>' . $rStyle . '</style></head><body><div id="notfound"><div class="notfound"><div class="notfound-404"><h1>XC_VM</h1><h2>' . $rError . '</h2><br/></div><p>' . $rErrorDescription . '</p></div></div></body></html>';
 
-		if ($rKill) {
+                if ($rKill) {
 			exit();
 		}
 	} else {

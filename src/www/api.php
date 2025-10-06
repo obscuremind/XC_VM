@@ -6,43 +6,42 @@ require 'init.php';
 $rDeny = true;
 loadapi();
 function loadapi() {
-	global $rDeny;
+        global $rDeny;
 
-	if (empty(CoreUtilities::$rRequest['password']) || CoreUtilities::$rRequest['password'] != CoreUtilities::$rSettings['live_streaming_pass']) {
-		generateError('INVALID_API_PASSWORD');
-	}
+        if (empty(CoreUtilities::$rRequest['password']) || CoreUtilities::$rRequest['password'] != CoreUtilities::$rSettings['live_streaming_pass']) {
+                generateError('INVALID_API_PASSWORD');
+        }
 
-	unset(CoreUtilities::$rRequest['password']);
+        unset(CoreUtilities::$rRequest['password']);
 
-	if (!in_array($_SERVER['REMOTE_ADDR'], CoreUtilities::getAllowedIPs())) {
-		generateError('API_IP_NOT_ALLOWED');
-	}
+        if (!in_array($_SERVER['REMOTE_ADDR'], CoreUtilities::getAllowedIPs())) {
+                generateError('API_IP_NOT_ALLOWED');
+        }
 
-	header('Access-Control-Allow-Origin: *');
-	$rAction = (!empty(CoreUtilities::$rRequest['action']) ? CoreUtilities::$rRequest['action'] : '');
-	$rDeny = false;
+        header('Access-Control-Allow-Origin: *');
+        $rAction = (!empty(CoreUtilities::$rRequest['action']) ? CoreUtilities::$rRequest['action'] : '');
+        $rDeny = false;
 
-	switch ($rAction) {
+        switch ($rAction) {
 		case 'view_log':
 			if (empty(CoreUtilities::$rRequest['stream_id'])) {
 				break;
 			}
 
-			$rStreamID = intval(CoreUtilities::$rRequest['stream_id']);
+                        $rStreamID = intval(CoreUtilities::$rRequest['stream_id']);
 
-			if (file_exists(STREAMS_PATH . $rStreamID . '.errors')) {
-				echo file_get_contents(STREAMS_PATH . $rStreamID . '.errors');
-			} else {
-				if (file_exists(VOD_PATH . $rStreamID . '.errors')) {
-					echo file_get_contents(VOD_PATH . $rStreamID . '.errors');
-				}
-			}
+                        if (file_exists(STREAMS_PATH . $rStreamID . '.errors')) {
+                                echo file_get_contents(STREAMS_PATH . $rStreamID . '.errors');
+                        } elseif (file_exists(VOD_PATH . $rStreamID . '.errors')) {
+                                echo file_get_contents(VOD_PATH . $rStreamID . '.errors');
+                        }
 
 			exit();
 
 
 		case 'fpm_status':
-			echo file_get_contents('http://127.0.0.1:' . CoreUtilities::$rServers[SERVER_ID]['http_broadcast_port'] . '/status');
+                        $rStatus = @file_get_contents('http://127.0.0.1:' . CoreUtilities::$rServers[SERVER_ID]['http_broadcast_port'] . '/status');
+                        echo ($rStatus !== false ? $rStatus : '');
 
 			break;
 
@@ -65,14 +64,13 @@ function loadapi() {
 		case 'streams_ramdisk':
 			set_time_limit(30);
 			$rReturn = array('result' => true, 'streams' => array());
-			exec('ls -l ' . STREAMS_PATH, $rFiles);
+                        exec('ls -l ' . STREAMS_PATH, $rFiles);
 
                         foreach ($rFiles as $rFile) {
                                 $rSplit = explode(' ', preg_replace('!\\s+!', ' ', $rFile));
                                 $rFileSplit = explode('_', $rSplit[count($rSplit) - 1]);
 
-                                if (count($rFileSplit) != 2) {
-                                } else {
+                                if (count($rFileSplit) == 2) {
                                         $rStreamID = intval($rFileSplit[0]);
                                         $rFileSize = intval($rSplit[4]);
 
@@ -90,37 +88,36 @@ function loadapi() {
 			exit();
 
 		case 'vod':
-			if (empty(CoreUtilities::$rRequest['stream_ids']) || empty(CoreUtilities::$rRequest['function'])) {
-			} else {
-				$rStreamIDs = array_map('intval', CoreUtilities::$rRequest['stream_ids']);
-				$rFunction = CoreUtilities::$rRequest['function'];
+                        if (!empty(CoreUtilities::$rRequest['stream_ids']) && !empty(CoreUtilities::$rRequest['function'])) {
+                                $rStreamIDs = array_map('intval', CoreUtilities::$rRequest['stream_ids']);
+                                $rFunction = CoreUtilities::$rRequest['function'];
 
-				switch ($rFunction) {
-					case 'start':
-						foreach ($rStreamIDs as $rStreamID) {
-							CoreUtilities::stopMovie($rStreamID, true);
+                                switch ($rFunction) {
+                                        case 'start':
+                                                foreach ($rStreamIDs as $rStreamID) {
+                                                        CoreUtilities::stopMovie($rStreamID, true);
 
-							if (isset(CoreUtilities::$rRequest['force']) && CoreUtilities::$rRequest['force']) {
-								CoreUtilities::startMovie($rStreamID);
-							} else {
-								CoreUtilities::queueMovie($rStreamID);
-							}
-						}
-						echo json_encode(array('result' => true));
+                                                        if (!empty(CoreUtilities::$rRequest['force'])) {
+                                                                CoreUtilities::startMovie($rStreamID);
+                                                        } else {
+                                                                CoreUtilities::queueMovie($rStreamID);
+                                                        }
+                                                }
+                                                echo json_encode(array('result' => true));
 
-						exit();
+                                                exit();
 
-					case 'stop':
-						foreach ($rStreamIDs as $rStreamID) {
-							CoreUtilities::stopMovie($rStreamID);
-						}
-						echo json_encode(array('result' => true));
+                                        case 'stop':
+                                                foreach ($rStreamIDs as $rStreamID) {
+                                                        CoreUtilities::stopMovie($rStreamID);
+                                                }
+                                                echo json_encode(array('result' => true));
 
-						exit();
-				}
-			}
+                                                exit();
+                                }
+                        }
 
-			// no break
+                        // no break
 		case 'rtmp_stats':
 			echo json_encode(CoreUtilities::getRTMPStats());
 
@@ -146,40 +143,39 @@ function loadapi() {
 			exit();
 
 		case 'stream':
-			if (empty(CoreUtilities::$rRequest['stream_ids']) || empty(CoreUtilities::$rRequest['function'])) {
-			} else {
-				$rStreamIDs = array_map('intval', CoreUtilities::$rRequest['stream_ids']);
-				$rFunction = CoreUtilities::$rRequest['function'];
+                        if (!empty(CoreUtilities::$rRequest['stream_ids']) && !empty(CoreUtilities::$rRequest['function'])) {
+                                $rStreamIDs = array_map('intval', CoreUtilities::$rRequest['stream_ids']);
+                                $rFunction = CoreUtilities::$rRequest['function'];
 
-				switch ($rFunction) {
-					case 'start':
-						foreach ($rStreamIDs as $rStreamID) {
-							if (CoreUtilities::startMonitor($rStreamID, true)) {
-								usleep(50000);
-							} else {
-								echo json_encode(array('result' => false));
+                                switch ($rFunction) {
+                                        case 'start':
+                                                foreach ($rStreamIDs as $rStreamID) {
+                                                        if (CoreUtilities::startMonitor($rStreamID, true)) {
+                                                                usleep(50000);
+                                                        } else {
+                                                                echo json_encode(array('result' => false));
 
-								exit();
-							}
-						}
-						echo json_encode(array('result' => true));
+                                                                exit();
+                                                        }
+                                                }
+                                                echo json_encode(array('result' => true));
 
-						exit();
+                                                exit();
 
-					case 'stop':
-						foreach ($rStreamIDs as $rStreamID) {
-							CoreUtilities::stopStream($rStreamID, true);
-						}
-						echo json_encode(array('result' => true));
+                                        case 'stop':
+                                                foreach ($rStreamIDs as $rStreamID) {
+                                                        CoreUtilities::stopStream($rStreamID, true);
+                                                }
+                                                echo json_encode(array('result' => true));
 
-						exit();
+                                                exit();
 
-					default:
-						break;
-				}
-			}
+                                        default:
+                                                break;
+                                }
+                        }
 
-			// no break
+                        // no break
 		case 'stats':
 			echo json_encode(CoreUtilities::getStats());
 
@@ -230,24 +226,24 @@ function loadapi() {
 
 			$rFilename = CoreUtilities::$rRequest['filename'];
 
-			if (in_array(strtolower(pathinfo($rFilename)['extension']), array('log', 'tar.gz', 'gz', 'zip', 'm3u8', 'mp4', 'mkv', 'avi', 'mpg', 'flv', '3gp', 'm4v', 'wmv', 'mov', 'ts', 'srt', 'sub', 'sbv', 'jpg', 'png', 'bmp', 'jpeg', 'gif', 'tif'))) {
+                        $rExtension = strtolower(pathinfo($rFilename, PATHINFO_EXTENSION));
 
-				if (!(file_exists($rFilename) && is_readable($rFilename))) {
-				} else {
-					header('Content-Type: application/octet-stream');
-					$rFP = @fopen($rFilename, 'rb');
+                        if (in_array($rExtension, array('log', 'tar.gz', 'gz', 'zip', 'm3u8', 'mp4', 'mkv', 'avi', 'mpg', 'flv', '3gp', 'm4v', 'wmv', 'mov', 'ts', 'srt', 'sub', 'sbv', 'jpg', 'png', 'bmp', 'jpeg', 'gif', 'tif'))) {
+
+                                if (file_exists($rFilename) && is_readable($rFilename)) {
+                                        header('Content-Type: application/octet-stream');
+                                        $rFP = @fopen($rFilename, 'rb');
 					$rSize = filesize($rFilename);
 					$rLength = $rSize;
 					$rStart = 0;
 					$rEnd = $rSize - 1;
 					header('Accept-Ranges: 0-' . $rLength);
 
-					if (!isset($_SERVER['HTTP_RANGE'])) {
-					} else {
-						$rRangeEnd = $rEnd;
-						list(, $rRange) = explode('=', $_SERVER['HTTP_RANGE'], 2);
+                                        if (isset($_SERVER['HTTP_RANGE'])) {
+                                                $rRangeEnd = $rEnd;
+                                                list(, $rRange) = explode('=', $_SERVER['HTTP_RANGE'], 2);
 
-						if (strpos($rRange, ',') === false) {
+                                                if (strpos($rRange, ',') === false) {
 
 
 
@@ -262,10 +258,10 @@ function loadapi() {
 
 							$rRangeEnd = ($rEnd < $rRangeEnd ? $rEnd : $rRangeEnd);
 
-							if (!($rRangeEnd < $rRangeStart || $rSize - 1 < $rRangeStart || $rSize <= $rRangeEnd)) {
-								$rStart = $rRangeStart;
-								$rEnd = $rRangeEnd;
-								$rLength = $rEnd - $rStart + 1;
+                                                        if (!($rRangeEnd < $rRangeStart || $rSize - 1 < $rRangeStart || $rSize <= $rRangeEnd)) {
+                                                                $rStart = $rRangeStart;
+                                                                $rEnd = $rRangeEnd;
+                                                                $rLength = $rEnd - $rStart + 1;
 								fseek($rFP, $rStart);
 								header('HTTP/1.1 206 Partial Content');
 							} else {
@@ -289,12 +285,12 @@ function loadapi() {
 						echo stream_get_line($rFP, (intval(CoreUtilities::$rSettings['read_buffer_size']) ?: 8192));
 					}
 					fclose($rFP);
-				}
+                                }
 
-				exit();
-			}
+                                exit();
+                        }
 
-			exit(json_encode(array('result' => false, 'error' => 'Invalid file extension.')));
+                        exit(json_encode(array('result' => false, 'error' => 'Invalid file extension.')));
 
 		case 'scandir_recursive':
 			set_time_limit(30);
@@ -320,7 +316,7 @@ function loadapi() {
 		case 'scandir':
 			set_time_limit(30);
 			$rDirectory = urldecode(CoreUtilities::$rRequest['dir']);
-			$rAllowed = (!empty(CoreUtilities::$rRequest['allowed']) ? explode('|', urldecode(CoreUtilities::$rRequest['allowed'])) : array());
+                        $rAllowed = (!empty(CoreUtilities::$rRequest['allowed']) ? explode('|', urldecode(CoreUtilities::$rRequest['allowed'])) : array());
 
 			if (!file_exists($rDirectory)) {
 				exit(json_encode(array('result' => false)));
@@ -332,18 +328,18 @@ function loadapi() {
 			foreach ($rFiles as $rKey => $rValue) {
 				if (in_array($rValue, array('.', '..'))) {
 				} else {
-					if (is_dir($rDirectory . '/' . $rValue)) {
-						$rReturn['dirs'][] = $rValue;
-					} else {
-						$rExt = strtolower(pathinfo($rValue)['extension']);
+                                        if (is_dir($rDirectory . '/' . $rValue)) {
+                                                $rReturn['dirs'][] = $rValue;
+                                        } else {
+                                                $rExt = strtolower(pathinfo($rValue, PATHINFO_EXTENSION));
 
-						if (!(is_array($rAllowed) && in_array($rExt, $rAllowed)) && $rAllowed) {
-						} else {
-							$rReturn['files'][] = $rValue;
-						}
-					}
-				}
-			}
+                                                if ($rAllowed && !(is_array($rAllowed) && in_array($rExt, $rAllowed))) {
+                                                } else {
+                                                        $rReturn['files'][] = $rValue;
+                                                }
+                                        }
+                                }
+                        }
 			echo json_encode($rReturn);
 			exit();
 
@@ -358,10 +354,10 @@ function loadapi() {
 			exit();
 
 		case 'redirect_connection':
-			if (!empty(CoreUtilities::$rRequest['uuid']) || !empty(CoreUtilities::$rRequest['stream_id'])) {
-				CoreUtilities::$rRequest['type'] = 'redirect';
-				file_put_contents(SIGNALS_PATH . CoreUtilities::$rRequest['uuid'], json_encode(CoreUtilities::$rRequest));
-			}
+                        if (!empty(CoreUtilities::$rRequest['uuid'])) {
+                                CoreUtilities::$rRequest['type'] = 'redirect';
+                                file_put_contents(SIGNALS_PATH . CoreUtilities::$rRequest['uuid'], json_encode(CoreUtilities::$rRequest));
+                        }
 			break;
 
 		case 'free_temp':
@@ -378,13 +374,12 @@ function loadapi() {
 			break;
 
 		case 'signal_send':
-			if (empty(CoreUtilities::$rRequest['message']) || empty(CoreUtilities::$rRequest['uuid'])) {
-			} else {
-				CoreUtilities::$rRequest['type'] = 'signal';
-				file_put_contents(SIGNALS_PATH . CoreUtilities::$rRequest['uuid'], json_encode(CoreUtilities::$rRequest));
-			}
+                        if (!empty(CoreUtilities::$rRequest['message']) && !empty(CoreUtilities::$rRequest['uuid'])) {
+                                CoreUtilities::$rRequest['type'] = 'signal';
+                                file_put_contents(SIGNALS_PATH . CoreUtilities::$rRequest['uuid'], json_encode(CoreUtilities::$rRequest));
+                        }
 
-			break;
+                        break;
 
 		case 'get_certificate_info':
 			echo json_encode(CoreUtilities::getCertificateInfo());
@@ -408,10 +403,10 @@ function loadapi() {
 			exit();
 
 		case 'request_update':
-			if (CoreUtilities::$rRequest['type'] == 0) {
-				$rFile = LOADBALANCER_UPDATE;
-			} else {
-				$rFile = PROXY_UPDATE;
+                        if (isset(CoreUtilities::$rRequest['type']) && intval(CoreUtilities::$rRequest['type']) === 0) {
+                                $rFile = LOADBALANCER_UPDATE;
+                        } else {
+                                $rFile = PROXY_UPDATE;
 			}
 
 			if (!file_exists($rFile)) {
@@ -426,53 +421,49 @@ function loadapi() {
 
 
 		case 'kill_watch':
-			if (file_exists(CACHE_TMP_PATH . 'watch_pid')) {
-				$rPrevPID = intval(file_get_contents(CACHE_TMP_PATH . 'watch_pid'));
-			} else {
-				$rPrevPID = null;
-			}
+                        if (file_exists(CACHE_TMP_PATH . 'watch_pid')) {
+                                $rPrevPID = intval(file_get_contents(CACHE_TMP_PATH . 'watch_pid'));
+                        } else {
+                                $rPrevPID = null;
+                        }
 
-			if (!($rPrevPID && CoreUtilities::isProcessRunning($rPrevPID, 'php'))) {
-			} else {
-				shell_exec('kill -9 ' . $rPrevPID);
-			}
+                        if ($rPrevPID && CoreUtilities::isProcessRunning($rPrevPID, 'php')) {
+                                shell_exec('kill -9 ' . $rPrevPID);
+                        }
 
 			$rPIDs = glob(WATCH_TMP_PATH . '*.wpid');
 
 			foreach ($rPIDs as $rPIDFile) {
 				$rPID = intval(basename($rPIDFile, '.wpid'));
 
-				if (!($rPID && CoreUtilities::isProcessRunning($rPID, 'php'))) {
-				} else {
-					shell_exec('kill -9 ' . $rPID);
-				}
+                                if ($rPID && CoreUtilities::isProcessRunning($rPID, 'php')) {
+                                        shell_exec('kill -9 ' . $rPID);
+                                }
 
-				unlink($rPIDFile);
+                                unlink($rPIDFile);
 			}
 
 			exit(json_encode(array('result' => true)));
 
 		case 'kill_plex':
-			if (file_exists(CACHE_TMP_PATH . 'plex_pid')) {
-				$rPrevPID = intval(file_get_contents(CACHE_TMP_PATH . 'plex_pid'));
-			} else {
-				$rPrevPID = null;
-			}
+                        if (file_exists(CACHE_TMP_PATH . 'plex_pid')) {
+                                $rPrevPID = intval(file_get_contents(CACHE_TMP_PATH . 'plex_pid'));
+                        } else {
+                                $rPrevPID = null;
+                        }
 
-			if (!($rPrevPID && CoreUtilities::isProcessRunning($rPrevPID, 'php'))) {
-			} else {
-				shell_exec('kill -9 ' . $rPrevPID);
-			}
+                        if ($rPrevPID && CoreUtilities::isProcessRunning($rPrevPID, 'php')) {
+                                shell_exec('kill -9 ' . $rPrevPID);
+                        }
 
 			$rPIDs = glob(WATCH_TMP_PATH . '*.ppid');
 
 			foreach ($rPIDs as $rPIDFile) {
 				$rPID = intval(basename($rPIDFile, '.ppid'));
 
-				if (!($rPID && CoreUtilities::isProcessRunning($rPID, 'php'))) {
-				} else {
-					shell_exec('kill -9 ' . $rPID);
-				}
+                                if ($rPID && CoreUtilities::isProcessRunning($rPID, 'php')) {
+                                        shell_exec('kill -9 ' . $rPID);
+                                }
 
 				unlink($rPIDFile);
 			}
@@ -487,26 +478,23 @@ function loadapi() {
 			$rURL = escapeshellcmd(CoreUtilities::$rRequest['url']);
 			$rFetchArguments = array();
 
-			if (!CoreUtilities::$rRequest['user_agent']) {
-			} else {
-				$rFetchArguments[] = sprintf("-user_agent '%s'", escapeshellcmd(CoreUtilities::$rRequest['user_agent']));
-			}
+                        if (!empty(CoreUtilities::$rRequest['user_agent'])) {
+                                $rFetchArguments[] = sprintf("-user_agent '%s'", escapeshellcmd(CoreUtilities::$rRequest['user_agent']));
+                        }
 
-			if (!CoreUtilities::$rRequest['http_proxy']) {
-			} else {
-				$rFetchArguments[] = sprintf("-http_proxy '%s'", escapeshellcmd(CoreUtilities::$rRequest['http_proxy']));
-			}
+                        if (!empty(CoreUtilities::$rRequest['http_proxy'])) {
+                                $rFetchArguments[] = sprintf("-http_proxy '%s'", escapeshellcmd(CoreUtilities::$rRequest['http_proxy']));
+                        }
 
-			if (!CoreUtilities::$rRequest['cookies']) {
-			} else {
-				$rFetchArguments[] = sprintf("-cookies '%s'", escapeshellcmd(CoreUtilities::$rRequest['cookies']));
-			}
+                        if (!empty(CoreUtilities::$rRequest['cookies'])) {
+                                $rFetchArguments[] = sprintf("-cookies '%s'", escapeshellcmd(CoreUtilities::$rRequest['cookies']));
+                        }
 
-			$rHeaders = (CoreUtilities::$rRequest['headers'] ? rtrim(CoreUtilities::$rRequest['headers'], "\r\n") . "\r\n" : '');
+			$rHeaders = (!empty(CoreUtilities::$rRequest['headers']) ? rtrim(CoreUtilities::$rRequest['headers'], "\r\n") . "\r\n" : '');
 			$rHeaders .= 'X-XC_VM-Prebuffer:1' . "\r\n";
 			$rFetchArguments[] = sprintf('-headers %s', escapeshellarg($rHeaders));
 
-			exit(json_encode(array('result' => true, 'data' => CoreUtilities::probeStream($rURL, $rFetchArguments, '', false))));
+                        exit(json_encode(array('result' => true, 'data' => CoreUtilities::probeStream($rURL, $rFetchArguments, '', false))));
 
 
 

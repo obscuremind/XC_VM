@@ -16,14 +16,16 @@ if (CoreUtilities::$rSettings['disable_player_api']) {
 }
 
 $rPanelAPI = false;
+$rRequestPath = (isset($_SERVER['REQUEST_URI']) ? parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) : '');
+$rRequestSegments = array_values(array_filter(explode('.', ltrim($rRequestPath, '/'))));
 
-if (strtolower(explode('.', ltrim(parse_url($_SERVER['REQUEST_URI'])['path'], '/'))[0]) == 'panel_api') {
-	if (!CoreUtilities::$rSettings['legacy_panel_api']) {
-		$rDeny = false;
-		generateError('LEGACY_PANEL_API_DISABLED');
-	} else {
-		$rPanelAPI = true;
-	}
+if (!empty($rRequestSegments) && strtolower($rRequestSegments[0]) == 'panel_api') {
+        if (!CoreUtilities::$rSettings['legacy_panel_api']) {
+                $rDeny = false;
+                generateError('LEGACY_PANEL_API_DISABLED');
+        } else {
+                $rPanelAPI = true;
+        }
 }
 
 $rIP = $_SERVER['REMOTE_ADDR'];
@@ -32,7 +34,8 @@ $rOffset = (empty(CoreUtilities::$rRequest['params']['offset']) ? 0 : abs(intval
 $rLimit = (empty(CoreUtilities::$rRequest['params']['items_per_page']) ? 0 : abs(intval(CoreUtilities::$rRequest['params']['items_per_page'])));
 $rNameTypes = array('live' => 'Live Streams', 'movie' => 'Movies', 'created_live' => 'Created Channels', 'radio_streams' => 'Radio Stations', 'series' => 'TV Series');
 $rDomainName = CoreUtilities::getDomainName();
-$rDomain = parse_url($rDomainName)['host'];
+$rDomainParts = parse_url($rDomainName);
+$rDomain = (is_array($rDomainParts) && isset($rDomainParts['host']) ? $rDomainParts['host'] : $rDomainName);
 $rValidActions = array('get_epg', 200 => 'get_vod_categories', 201 => 'get_live_categories', 202 => 'get_live_streams', 203 => 'get_vod_streams', 204 => 'get_series_info', 205 => 'get_short_epg', 206 => 'get_series_categories', 207 => 'get_simple_data_table', 208 => 'get_series', 209 => 'get_vod_info');
 $output = array();
 $rAction = (!empty(CoreUtilities::$rRequest['action']) && (in_array(CoreUtilities::$rRequest['action'], $rValidActions) || array_key_exists(CoreUtilities::$rRequest['action'], $rValidActions)) ? CoreUtilities::$rRequest['action'] : '');

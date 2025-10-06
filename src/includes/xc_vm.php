@@ -47,14 +47,12 @@ class CoreUtilities {
 		} else {
 			self::$rSettings = self::getSettings();
 		}
-		if (empty(self::$rSettings['default_timezone'])) {
-		} else {
-			date_default_timezone_set(self::$rSettings['default_timezone']);
-		}
-		if (self::$rSettings['on_demand_wait_time'] != 0) {
-		} else {
-			self::$rSettings['on_demand_wait_time'] = 15;
-		}
+                if (!empty(self::$rSettings['default_timezone'])) {
+                        date_default_timezone_set(self::$rSettings['default_timezone']);
+                }
+                if (empty(self::$rSettings['on_demand_wait_time'])) {
+                        self::$rSettings['on_demand_wait_time'] = 15;
+                }
 		self::$rSegmentSettings = array('seg_type' => self::$rSettings['segment_type'], 'seg_time' => intval(self::$rSettings['seg_time']), 'seg_list_size' => intval(self::$rSettings['seg_list_size']), 'seg_delete_threshold' => intval(self::$rSettings['seg_delete_threshold']));
 		switch (self::$rSettings['ffmpeg_cpu']) {
 			case '8.0':
@@ -451,24 +449,21 @@ class CoreUtilities {
 			return array();
 		}
 	}
-	public static function cleanGlobals(&$rData, $rIteration = 0) {
-		if (10 > $rIteration) {
-			foreach ($rData as $rKey => $rValue) {
-				if (is_array($rValue)) {
-					self::cleanGlobals($rData[$rKey], ++$rIteration);
-				} else {
-					$rValue = str_replace(chr('0'), '', $rValue);
-					$rValue = str_replace('', '', $rValue);
-					$rValue = str_replace('', '', $rValue);
-					$rValue = str_replace('../', '&#46;&#46;/', $rValue);
-					$rValue = str_replace('&#8238;', '', $rValue);
-					$rData[$rKey] = $rValue;
-				}
-			}
-		} else {
-			return null;
-		}
-	}
+        public static function cleanGlobals(&$rData, $rIteration = 0) {
+                if (!is_array($rData) || $rIteration >= 10) {
+                        return;
+                }
+                foreach ($rData as $rKey => $rValue) {
+                        if (is_array($rValue)) {
+                                self::cleanGlobals($rData[$rKey], $rIteration + 1);
+                                continue;
+                        }
+                        $rValue = str_replace(chr(0), '', $rValue);
+                        $rValue = str_replace('../', '&#46;&#46;/', $rValue);
+                        $rValue = str_replace('&#8238;', '', $rValue);
+                        $rData[$rKey] = $rValue;
+                }
+        }
 	public static function parseIncomingRecursively(&$rData, $rInput = array(), $rIteration = 0) {
 		if (20 > $rIteration) {
 			if (is_array($rData)) {

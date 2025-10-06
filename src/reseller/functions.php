@@ -1,52 +1,72 @@
 <?php
 
-if (defined('MAIN_HOME')) {
-} else {
-	define('MAIN_HOME', '/home/xc_vm/');
+if (!defined('MAIN_HOME')) {
+    define('MAIN_HOME', '/home/xc_vm/');
 }
 
 require_once MAIN_HOME . 'includes/admin.php';
 
-if (!$rMobile) {
-} else {
-	$rSettings['js_navigate'] = 0;
+if (!empty($rMobile)) {
+    $rSettings['js_navigate'] = 0;
 }
 
-if (!isset($_SESSION['reseller'])) {
-} else {
-	$rUserInfo = getRegisteredUser($_SESSION['reseller']);
+if (isset($_SESSION['reseller'])) {
+    $rUserInfo = getRegisteredUser($_SESSION['reseller']);
 
-	if (0 >= strlen($rUserInfo['timezone'])) {
-	} else {
-		date_default_timezone_set($rUserInfo['timezone']);
-	}
+    if (!empty($rUserInfo['timezone'])) {
+        date_default_timezone_set($rUserInfo['timezone']);
+    }
 
-	setcookie('hue', $rUserInfo['hue'], time() + 604800);
-	setcookie('theme', $rUserInfo['theme'], time() + 604800);
-	$rPermissions = array_merge(getPermissions($rUserInfo['member_group_id']), getGroupPermissions($rUserInfo['id']));
-	$rUserInfo['reports'] = array_map('intval', array_merge(array($rUserInfo['id']), $rPermissions['all_reports']));
-	$rIP = getIP();
-	$rIPMatch = ($rSettings['ip_subnet_match'] ? implode('.', array_slice(explode('.', $_SESSION['rip']), 0, -1)) == implode('.', array_slice(explode('.', $rIP), 0, -1)) : $_SESSION['rip'] == $rIP);
+    setcookie('hue', (string) ($rUserInfo['hue'] ?? ''), time() + 604800);
+    setcookie('theme', (string) ($rUserInfo['theme'] ?? ''), time() + 604800);
 
-	if (!$rUserInfo || !$rPermissions || !$rPermissions['is_reseller'] || !$rIPMatch && $rSettings['ip_logout'] || $_SESSION['rverify'] != md5($rUserInfo['username'] . '||' . $rUserInfo['password'])) {
-		unset($rUserInfo, $rPermissions);
+    $memberGroupId = $rUserInfo['member_group_id'] ?? null;
+    $userId = $rUserInfo['id'] ?? null;
+    $rPermissions = ($memberGroupId !== null && $userId !== null)
+        ? array_merge(getPermissions($memberGroupId), getGroupPermissions($userId))
+        : [];
 
-		destroySession('reseller');
-		header('Location: ./index');
+    $allReports = $rPermissions['all_reports'] ?? [];
+    $rUserInfo['reports'] = array_map('intval', array_merge($userId !== null ? [$userId] : [], $allReports));
 
-		exit();
-	}
+    $rIP = getIP();
+    $sessionIP = $_SESSION['rip'] ?? '';
 
-	if ($_SESSION['rip'] == $rIP || $rSettings['ip_logout']) {
-	} else {
-		$_SESSION['rip'] = $rIP;
-	}
+    if (!empty($rSettings['ip_subnet_match'])) {
+        $rIPMatch = implode('.', array_slice(explode('.', $sessionIP), 0, -1)) === implode('.', array_slice(explode('.', $rIP), 0, -1));
+    } else {
+        $rIPMatch = $sessionIP === $rIP;
+    }
+
+    $isValid = !empty($rUserInfo)
+        && !empty($rPermissions)
+        && !empty($rPermissions['is_reseller'])
+        && ($rIPMatch || empty($rSettings['ip_logout']));
+
+    $verifyHash = md5(($rUserInfo['username'] ?? '') . '||' . ($rUserInfo['password'] ?? ''));
+    $sessionVerify = $_SESSION['rverify'] ?? '';
+
+    if (
+        !$isValid
+        || (!empty($rSettings['ip_logout']) && !$rIPMatch)
+        || $sessionVerify !== $verifyHash
+    ) {
+        unset($rUserInfo, $rPermissions);
+
+        destroySession('reseller');
+        header('Location: ./index');
+
+        exit();
+    }
+
+    if ($sessionIP !== $rIP && empty($rSettings['ip_logout'])) {
+        $_SESSION['rip'] = $rIP;
+    }
 }
 
-if (!isset(CoreUtilities::$rRequest['status'])) {
-} else {
-	$_STATUS = intval(CoreUtilities::$rRequest['status']);
-	$rArgs = CoreUtilities::$rRequest;
-	unset($rArgs['status']);
-	$customScript = setArgs($rArgs);
+if (isset(CoreUtilities::$rRequest['status'])) {
+    $_STATUS = (int) CoreUtilities::$rRequest['status'];
+    $rArgs = CoreUtilities::$rRequest;
+    unset($rArgs['status']);
+    $customScript = setArgs($rArgs);
 }
