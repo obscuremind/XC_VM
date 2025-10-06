@@ -121,13 +121,13 @@ class TS {
 		return $rReturn;
 	}
 
-	public function stepBytes($rBytes) {
-		$rData = substr(self::$rBuffer, self::$rIndex - 1, $rBytes);
+        public function stepBytes($rBytes) {
+                $rData = substr(self::$rBuffer, self::$rIndex - 1, $rBytes);
 
-		foreach (range(0, $rBytes) as $i) {
-			self::getBits(8);
-		}
+                for ($i = 0; $i < $rBytes; $i++) {
+                        self::getBits(8);
+                }
 
-		return $rData;
-	}
+                return $rData;
+        }
 }

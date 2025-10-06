@@ -1,144 +1,170 @@
 <?php
 
-include 'functions.php';
+require_once 'functions.php';
 
-if (!isset($_SESSION['reseller'])) {
-	session_start();
-	$rIP = getIP();
-
-	if (0 >= intval($rSettings['login_flood'])) {
-	} else {
-		$db->query("SELECT COUNT(`id`) AS `count` FROM `login_logs` WHERE `status` = 'INVALID_LOGIN' AND `login_ip` = ? AND TIME_TO_SEC(TIMEDIFF(NOW(), `date`)) <= 86400;", $rIP);
-
-		if ($db->num_rows() != 1) {
-		} else {
-			if (intval($rSettings['login_flood']) > intval($db->get_row()['count'])) {
-			} else {
-				API::blockIP(array('ip' => $rIP, 'notes' => 'LOGIN FLOOD ATTACK'));
-
-				exit();
-			}
-		}
-	}
-
-	if (!isset(CoreUtilities::$rRequest['login'])) {
-	} else {
-		$rReturn = ResellerAPI::processLogin(CoreUtilities::$rRequest);
-		$_STATUS = $rReturn['status'];
-
-		if ($_STATUS != STATUS_SUCCESS) {
-		} else {
-			if (0 < strlen(CoreUtilities::$rRequest['referrer'])) {
-				$rReferer = basename(CoreUtilities::$rRequest['referrer']);
-
-				if (substr($rReferer, 0, 6) != 'logout') {
-				} else {
-					$rReferer = 'dashboard';
-				}
-
-				header('Location: ' . $rReferer);
-
-				exit();
-			}
-
-			header('Location: dashboard');
-
-			exit();
-		}
-	}
-
-	echo '<!DOCTYPE html>' . "\n" . '<html lang="en">' . "\n" . '    <head>' . "\n" . '        <meta charset="utf-8" />' . "\n" . '        <title data-id="login">XC_VM | ';
-	echo $_['login'];
-	echo '</title>' . "\n" . '        <meta name="viewport" content="width=device-width, initial-scale=1.0">' . "\n" . '        <meta http-equiv="X-UA-Compatible" content="IE=edge" />' . "\n" . '        <link rel="shortcut icon" href="assets/images/favicon.ico">' . "\n\t\t" . '<link href="assets/css/icons.css" rel="stylesheet" type="text/css" />' . "\n" . '        ';
-
-	if (isset($_COOKIE['theme']) && $_COOKIE['theme'] == 1) {
-		echo "\t\t" . '<link href="assets/css/bootstrap.dark.css" rel="stylesheet" type="text/css" />' . "\n" . '        <link href="assets/css/app.dark.css" rel="stylesheet" type="text/css" />' . "\n" . '        ';
-	} else {
-		echo '        <link href="assets/css/bootstrap.css" rel="stylesheet" type="text/css" />' . "\n" . '        <link href="assets/css/app.css" rel="stylesheet" type="text/css" />' . "\n" . '        ';
-	}
-
-	echo '        <link href="assets/css/extra.css" rel="stylesheet" type="text/css" />' . "\n\t\t" . '<style>' . "\n" . '        .g-recaptcha {' . "\n" . '            display: inline-block;' . "\n" . '        }' . "\n" . '        .vertical-center {' . "\n" . '            margin: 0;' . "\n" . '            position: absolute;' . "\n" . '            top: 50%;' . "\n" . '            -ms-transform: translateY(-50%);' . "\n" . '            transform: translateY(-50%);' . "\n" . '            width: 100%;' . "\n" . '        }' . "\n\t\t" . '</style>' . "\n" . '    </head>' . "\n" . '    <body class="bg-animate';
-
-	if (!(isset($_COOKIE['hue']) && 0 < strlen($_COOKIE['hue']) && in_array($_COOKIE['hue'], array_keys($rHues)))) {
-	} else {
-		echo '-' . $_COOKIE['hue'];
-	}
-
-	echo '">' . "\n" . '        <div class="body-full navbar-custom">' . "\n" . '            <div class="account-pages vertical-center">' . "\n" . '                <div class="container">' . "\n" . '                    <div class="row justify-content-center">' . "\n" . '                        <div class="col-md-8 col-lg-6 col-xl-5">' . "\n" . '                            <div class="text-center w-75 m-auto">' . "\n" . '                                <span><img src="assets/images/logo.png" height="80px" alt=""></span>' . "\n" . '                                <p class="text-muted mb-4 mt-3"></p>' . "\n" . '                            </div>' . "\n" . '                            ';
-
-	if (isset($_STATUS) && $_STATUS == STATUS_FAILURE) {
-		echo '                            <div class="alert alert-danger alert-dismissible bg-danger text-white border-0 fade show" role="alert">' . "\n" . '                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' . "\n" . '                                ';
-		echo $_['login_message_1'];
-		echo '                            </div>' . "\n" . '                            ';
-	} else {
-		if (isset($_STATUS) && $_STATUS == STATUS_INVALID_CODE) {
-			echo '                            <div class="alert alert-danger alert-dismissible bg-danger text-white border-0 fade show" role="alert">' . "\n" . '                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' . "\n" . '                                ';
-			echo $_['login_message_2'];
-			echo '                            </div>' . "\n" . '                            ';
-		} else {
-			if (isset($_STATUS) && $_STATUS == STATUS_NOT_RESELLER) {
-				echo '                            <div class="alert alert-danger alert-dismissible bg-danger text-white border-0 fade show" role="alert">' . "\n" . '                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' . "\n" . '                                ';
-				echo $_['login_message_3'];
-				echo '                            </div>' . "\n" . '                            ';
-			} else {
-				if (isset($_STATUS) && $_STATUS == STATUS_DISABLED) {
-					echo '                            <div class="alert alert-danger alert-dismissible bg-danger text-white border-0 fade show" role="alert">' . "\n" . '                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' . "\n" . '                                ';
-					echo $_['login_message_4'];
-					echo '                            </div>' . "\n" . '                            ';
-				} else {
-					if (!(isset($_STATUS) && $_STATUS == STATUS_INVALID_CAPTCHA)) {
-					} else {
-						echo '                            <div class="alert alert-danger alert-dismissible bg-danger text-white border-0 fade show" role="alert">' . "\n" . '                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' . "\n" . '                                ';
-						echo $_['login_message_5'];
-						echo '                            </div>' . "\n" . '                            ';
-					}
-				}
-			}
-		}
-	}
-
-	echo '                            <form action="./login" method="POST" data-parsley-validate="">' . "\n" . '                                <div class="card">' . "\n" . '                                    <div class="card-body p-4">' . "\n" . '                                        <input type="hidden" name="referrer" value="';
-	echo htmlspecialchars(CoreUtilities::$rRequest['referrer']);
-	echo '" />' . "\n" . '                                        <div class="form-group mb-3" id="username_group">' . "\n" . '                                            <label for="username">';
-	echo $_['username'];
-	echo '</label>' . "\n" . '                                            <input class="form-control" autocomplete="off" type="text" id="username" name="username" required data-parsley-trigger="change" placeholder="">' . "\n" . '                                        </div>' . "\n" . '                                        <div class="form-group mb-3">' . "\n" . '                                            <label for="password">';
-	echo $_['password'];
-	echo '</label>' . "\n" . '                                            <input class="form-control" autocomplete="off" type="password" required data-parsley-trigger="change" id="password" name="password" placeholder="">' . "\n" . '                                        </div>' . "\n" . '                                        ';
-
-	if (!$rSettings['recaptcha_enable']) {
-	} else {
-		echo '                                        <h5 class="auth-title text-center" style="margin-bottom:0;">' . "\n" . '                                            <div class="g-recaptcha" data-callback="recaptchaCallback" id="verification" data-sitekey="';
-		echo $rSettings['recaptcha_v2_site_key'];
-		echo '"></div>' . "\n" . '                                        </h5>' . "\n" . '                                        ';
-	}
-
-	echo '                                    </div>' . "\n" . '                                </div>' . "\n" . '                                <div class="form-group mb-0 text-center">' . "\n" . '                                    <button style="border:0" class="btn btn-info ';
-
-	if (isset($_COOKIE['hue']) && 0 < strlen($_COOKIE['hue']) && in_array($_COOKIE['hue'], array_keys($rHues))) {
-		echo 'bg-animate-' . $_COOKIE['hue'];
-	} else {
-		echo 'bg-animate-info';
-	}
-
-	echo ' btn-block" type="submit" id="login_button" name="login"';
-
-	if (!$rSettings['recaptcha_enable']) {
-	} else {
-		echo ' disabled';
-	}
-
-	echo '>';
-	echo $_['login'];
-	echo '</button>' . "\n" . '                                </div>' . "\n" . '                            </form>' . "\n" . '                        </div>' . "\n" . '                    </div>' . "\n" . '                </div>' . "\n" . '            </div>' . "\n" . '        </div>' . "\n" . '        <script src="assets/js/vendor.min.js"></script>' . "\n" . '        <script src="assets/libs/parsleyjs/parsley.min.js"></script>' . "\n" . '        <script src="assets/js/app.min.js"></script>' . "\n\t\t";
-
-	if (!$rSettings['recaptcha_enable']) {
-	} else {
-		echo "\t\t" . '<script src="https://www.google.com/recaptcha/api.js" async defer></script>' . "\n\t\t";
-	}
-
-	echo '        <script>' . "\n" . '        function recaptchaCallback() {' . "\n" . "            \$('#login_button').removeAttr('disabled');" . "\n" . '        };' . "\n" . '        </script>' . "\n" . '    </body>' . "\n" . '</html>';
-} else {
-	header('Location: dashboard');
-
-	exit();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
 }
+
+if (!empty($_SESSION['reseller'])) {
+    header('Location: dashboard');
+    exit();
+}
+
+$rIP = getIP();
+$rLoginFloodLimit = intval($rSettings['login_flood'] ?? 0);
+
+if ($rLoginFloodLimit > 0) {
+    $db->query(
+        "SELECT COUNT(`id`) AS `count` FROM `login_logs` WHERE `status` = 'INVALID_LOGIN' AND `login_ip` = ? " .
+        'AND TIME_TO_SEC(TIMEDIFF(NOW(), `date`)) <= 86400;',
+        $rIP
+    );
+
+    $rLoginAttempts = 0;
+
+    if ($db->num_rows() === 1) {
+        $rRow = $db->get_row();
+
+        if (is_array($rRow) && isset($rRow['count'])) {
+            $rLoginAttempts = intval($rRow['count']);
+        }
+    }
+
+    if ($rLoginAttempts >= $rLoginFloodLimit) {
+        API::blockIP(array('ip' => $rIP, 'notes' => 'LOGIN FLOOD ATTACK'));
+        exit();
+    }
+}
+
+$_STATUS = null;
+
+if (!empty(CoreUtilities::$rRequest['login'])) {
+    $rReturn = ResellerAPI::processLogin(CoreUtilities::$rRequest);
+    $_STATUS = $rReturn['status'] ?? STATUS_FAILURE;
+
+    if ($_STATUS === STATUS_SUCCESS) {
+        $rReferer = '';
+        $rRequestReferrer = CoreUtilities::$rRequest['referrer'] ?? '';
+
+        if ($rRequestReferrer !== '') {
+            $rReferer = basename($rRequestReferrer);
+
+            if (strpos($rReferer, 'logout') === 0) {
+                $rReferer = 'dashboard';
+            }
+        }
+
+        header('Location: ' . ($rReferer ?: 'dashboard'));
+        exit();
+    }
+}
+
+$rThemeIsDark = isset($_COOKIE['theme']) && $_COOKIE['theme'] == 1;
+$rHue = $_COOKIE['hue'] ?? null;
+$rHueIsValid = is_string($rHue) && $rHue !== '' && isset($rHues[$rHue]);
+$rBodyClass = 'bg-animate' . ($rHueIsValid ? '-' . $rHue : '');
+$rButtonClass = 'bg-animate-' . ($rHueIsValid ? $rHue : 'info');
+$rReferrerValue = htmlspecialchars(CoreUtilities::$rRequest['referrer'] ?? '', ENT_QUOTES, 'UTF-8');
+$rShowRecaptcha = !empty($rSettings['recaptcha_enable']);
+
+$rStatusMessages = array(
+    STATUS_FAILURE => $_['login_message_1'],
+    STATUS_INVALID_CODE => $_['login_message_2'],
+    STATUS_NOT_RESELLER => $_['login_message_3'],
+    STATUS_DISABLED => $_['login_message_4'],
+    STATUS_INVALID_CAPTCHA => $_['login_message_5'],
+);
+
+$rStatusMessage = ($_STATUS !== null && isset($rStatusMessages[$_STATUS])) ? $rStatusMessages[$_STATUS] : null;
+?>
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title data-id="login">XC_VM | <?= $_['login']; ?></title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <link rel="shortcut icon" href="assets/images/favicon.ico">
+        <link href="assets/css/icons.css" rel="stylesheet" type="text/css" />
+        <?php if ($rThemeIsDark): ?>
+            <link href="assets/css/bootstrap.dark.css" rel="stylesheet" type="text/css" />
+            <link href="assets/css/app.dark.css" rel="stylesheet" type="text/css" />
+        <?php else: ?>
+            <link href="assets/css/bootstrap.css" rel="stylesheet" type="text/css" />
+            <link href="assets/css/app.css" rel="stylesheet" type="text/css" />
+        <?php endif; ?>
+        <link href="assets/css/extra.css" rel="stylesheet" type="text/css" />
+        <style>
+            .g-recaptcha {
+                display: inline-block;
+            }
+            .vertical-center {
+                margin: 0;
+                position: absolute;
+                top: 50%;
+                -ms-transform: translateY(-50%);
+                transform: translateY(-50%);
+                width: 100%;
+            }
+        </style>
+    </head>
+    <body class="<?= $rBodyClass; ?>">
+        <div class="body-full navbar-custom">
+            <div class="account-pages vertical-center">
+                <div class="container">
+                    <div class="row justify-content-center">
+                        <div class="col-md-8 col-lg-6 col-xl-5">
+                            <div class="text-center w-75 m-auto">
+                                <span><img src="assets/images/logo.png" height="80px" alt=""></span>
+                                <p class="text-muted mb-4 mt-3"></p>
+                            </div>
+                            <?php if ($rStatusMessage !== null): ?>
+                                <div class="alert alert-danger alert-dismissible bg-danger text-white border-0 fade show" role="alert">
+                                    <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                    <?= $rStatusMessage; ?>
+                                </div>
+                            <?php endif; ?>
+                            <form action="./login" method="POST" data-parsley-validate="">
+                                <div class="card">
+                                    <div class="card-body p-4">
+                                        <input type="hidden" name="referrer" value="<?= $rReferrerValue; ?>" />
+                                        <div class="form-group mb-3" id="username_group">
+                                            <label for="username"><?= $_['username']; ?></label>
+                                            <input class="form-control" autocomplete="off" type="text" id="username" name="username" required data-parsley-trigger="change" placeholder="">
+                                        </div>
+                                        <div class="form-group mb-3">
+                                            <label for="password"><?= $_['password']; ?></label>
+                                            <input class="form-control" autocomplete="off" type="password" required data-parsley-trigger="change" id="password" name="password" placeholder="">
+                                        </div>
+                                        <?php if ($rShowRecaptcha): ?>
+                                            <h5 class="auth-title text-center" style="margin-bottom:0;">
+                                                <div class="g-recaptcha" data-callback="recaptchaCallback" id="verification" data-sitekey="<?= $rSettings['recaptcha_v2_site_key']; ?>"></div>
+                                            </h5>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <div class="form-group mb-0 text-center">
+                                    <button style="border:0" class="btn btn-info <?= $rButtonClass; ?> btn-block" type="submit" id="login_button" name="login"<?= $rShowRecaptcha ? ' disabled' : ''; ?>>
+                                        <?= $_['login']; ?>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script src="assets/js/vendor.min.js"></script>
+        <script src="assets/libs/parsleyjs/parsley.min.js"></script>
+        <script src="assets/js/app.min.js"></script>
+        <?php if ($rShowRecaptcha): ?>
+            <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+        <?php endif; ?>
+        <script>
+            function recaptchaCallback() {
+                $('#login_button').removeAttr('disabled');
+            }
+        </script>
+    </body>
+</html>
