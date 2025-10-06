@@ -1,14 +1,14 @@
 <?php
-
 $rSkipVerify = true;
 include 'functions.php';
 
-if (!file_exists('install.php') || file_exists('config.php') || extension_loaded('xc_vm')) {
-} else {
-	header('Location: install.php');
+if (file_exists('install.php') && !file_exists('config.php') && !extension_loaded('xc_vm')) {
+    header('Location: install.php');
+    exit;
 }
 
 destroySession();
+
 define('CLIENT_INVALID', 0);
 define('CLIENT_IS_E2', 1);
 define('CLIENT_IS_MAG', 2);
@@ -17,126 +17,135 @@ define('CLIENT_EXPIRED', 4);
 define('CLIENT_BANNED', 5);
 define('CLIENT_DISABLED', 6);
 define('CLIENT_DISALLOWED', 7);
-$rErrors = array('Invalid username or password.', 'Enigma lines are not permitted here.', 'MAG lines are not permitted here.', 'Stalker lines are not permitted here.', 'Your line has expired.', 'Your line has been banned.', 'Your line has been disabled.', 'You are not allowed to access this player.');
 
-if (empty(CoreUtilities::$rRequest['username']) && empty(CoreUtilities::$rRequest['password'])) {
-} else {
-	$rIP = CoreUtilities::getUserIP();
-	$rCountryCode = CoreUtilities::getIPInfo($rIP)['country']['iso_code'];
-	$rUserInfo = CoreUtilities::getUserInfo(null, CoreUtilities::$rRequest['username'], CoreUtilities::$rRequest['password'], true);
-	$rDeny = true;
-	$rUserAgent = (empty($_SERVER['HTTP_USER_AGENT']) ? '' : htmlentities(trim($_SERVER['HTTP_USER_AGENT'])));
+$rErrors = array(
+    'Invalid username or password.',
+    'Enigma lines are not permitted here.',
+    'MAG lines are not permitted here.',
+    'Stalker lines are not permitted here.',
+    'Your line has expired.',
+    'Your line has been banned.',
+    'Your line has been disabled.',
+    'You are not allowed to access this player.'
+);
 
-	if ($rUserInfo) {
-		if (!$rUserInfo['is_e2']) {
+$rStatus = null;
 
+if (!empty(CoreUtilities::$rRequest['username']) || !empty(CoreUtilities::$rRequest['password'])) {
+    $rIP = CoreUtilities::getUserIP();
+    $rIPInfo = CoreUtilities::getIPInfo($rIP);
+    $rCountryCode = $rIPInfo['country']['iso_code'] ?? '';
+    $rUserInfo = CoreUtilities::getUserInfo(null, CoreUtilities::$rRequest['username'], CoreUtilities::$rRequest['password'], true);
+    $rUserAgent = empty($_SERVER['HTTP_USER_AGENT']) ? '' : htmlentities(trim($_SERVER['HTTP_USER_AGENT']));
+    $rAllowedCountries = CoreUtilities::$rSettings['allow_countries'] ?? array();
+    $rDeny = true;
 
-			if (!$rUserInfo['is_mag']) {
+    if (!$rUserInfo) {
+        $rStatus = CLIENT_INVALID;
+    } elseif (!empty($rUserInfo['is_e2'])) {
+        $rStatus = CLIENT_IS_E2;
+    } elseif (!empty($rUserInfo['is_mag'])) {
+        $rStatus = CLIENT_IS_MAG;
+    } elseif (!empty($rUserInfo['is_stalker'])) {
+        $rStatus = CLIENT_IS_STALKER;
+    } elseif (!is_null($rUserInfo['exp_date']) && $rUserInfo['exp_date'] <= time()) {
+        $rStatus = CLIENT_EXPIRED;
+    } elseif (empty($rUserInfo['admin_enabled'])) {
+        $rStatus = CLIENT_BANNED;
+    } elseif (empty($rUserInfo['enabled'])) {
+        $rStatus = CLIENT_DISABLED;
+    } else {
+        $rAllowedIPs = array();
+        if (!empty($rUserInfo['allowed_ips']) && is_array($rUserInfo['allowed_ips'])) {
+            $rAllowedIPs = array_map('gethostbyname', $rUserInfo['allowed_ips']);
+        }
 
+        $rForceCountry = !empty($rUserInfo['forced_country']);
+        $rCountryAllowed = true;
 
-				if (!$rUserInfo['is_stalker']) {
+        if (!empty($rAllowedIPs) && !in_array($rIP, $rAllowedIPs, true)) {
+            $rStatus = CLIENT_DISALLOWED;
+        } elseif (!empty($rCountryCode)) {
+            if ($rForceCountry && $rUserInfo['forced_country'] != 'ALL' && $rCountryCode != $rUserInfo['forced_country']) {
+                $rCountryAllowed = false;
+            } elseif (!($rForceCountry || in_array('ALL', $rAllowedCountries, true) || in_array($rCountryCode, $rAllowedCountries, true))) {
+                $rCountryAllowed = false;
+            }
 
+            if (!$rCountryAllowed) {
+                $rStatus = CLIENT_DISALLOWED;
+            }
+        }
 
-					if (is_null($rUserInfo['exp_date']) || $rUserInfo['exp_date'] > time()) {
+        if (is_null($rStatus)) {
+            if (!empty($rUserInfo['allowed_ua']) && is_array($rUserInfo['allowed_ua']) && !in_array($rUserAgent, $rUserInfo['allowed_ua'], true)) {
+                $rStatus = CLIENT_DISALLOWED;
+            } elseif (!empty($rUserInfo['isp_violate'])) {
+                $rStatus = CLIENT_DISALLOWED;
+            } elseif (!empty($rUserInfo['isp_is_server']) && empty($rUserInfo['is_restreamer'])) {
+                $rStatus = CLIENT_DISALLOWED;
+            } else {
+                $rDeny = false;
+                $_SESSION['phash'] = $rUserInfo['id'];
+                $_SESSION['pverify'] = md5($rUserInfo['username'] . '||' . $rUserInfo['password']);
+                header('Location: index.php');
+                exit;
+            }
+        }
+    }
 
-
-						if ($rUserInfo['admin_enabled'] != 0) {
-
-
-							if ($rUserInfo['enabled'] != 0) {
-
-
-								$rDeny = false;
-
-								if (empty($rUserInfo['allowed_ips']) || in_array($rIP, array_map('gethostbyname', $rUserInfo['allowed_ips']))) {
-
-
-									if (empty($rCountryCode)) {
-									} else {
-										$rForceCountry = !empty($rUserInfo['forced_country']);
-
-										if (!($rForceCountry && $rUserInfo['forced_country'] != 'ALL' && $rCountryCode != $rUserInfo['forced_country'])) {
-
-
-											if ($rForceCountry || in_array('ALL', CoreUtilities::$rSettings['allow_countries']) || in_array($rCountryCode, CoreUtilities::$rSettings['allow_countries'])) {
-											} else {
-												$_STATUS = CLIENT_DISALLOWED;
-											}
-										} else {
-											$_STATUS = CLIENT_DISALLOWED;
-										}
-									}
-
-									if (empty($rUserInfo['allowed_ua']) || in_array($rUserAgent, $rUserInfo['allowed_ua'])) {
-
-
-										if (!$rUserInfo['isp_violate']) {
-
-
-											if (!$rUserInfo['isp_is_server'] || $rUserInfo['is_restreamer']) {
-
-
-												$_SESSION['phash'] = $rUserInfo['id'];
-												$_SESSION['pverify'] = md5($rUserInfo['username'] . '||' . $rUserInfo['password']);
-												header('Location: index.php');
-											} else {
-												$_STATUS = CLIENT_DISALLOWED;
-											}
-										} else {
-											$_STATUS = CLIENT_DISALLOWED;
-										}
-									} else {
-										$_STATUS = CLIENT_DISALLOWED;
-									}
-								} else {
-									$_STATUS = CLIENT_DISALLOWED;
-								}
-							} else {
-								$_STATUS = CLIENT_DISABLED;
-							}
-						} else {
-							$_STATUS = CLIENT_BANNED;
-						}
-					} else {
-						$_STATUS = CLIENT_EXPIRED;
-					}
-				} else {
-					$_STATUS = CLIENT_IS_STALKER;
-				}
-			} else {
-				$_STATUS = CLIENT_IS_MAG;
-			}
-		} else {
-			$_STATUS = CLIENT_IS_E2;
-		}
-	} else {
-		$_STATUS = CLIENT_INVALID;
-	}
-
-	if (!$rDeny) {
-	} else {
-		CoreUtilities::checkFlood();
-	}
+    if ($rDeny) {
+        CoreUtilities::checkFlood();
+    }
 }
-
-echo '<!DOCTYPE html>' . "\r\n" . '<html lang="en">' . "\r\n" . '<head>' . "\r\n\t" . '<meta charset="utf-8">' . "\r\n\t" . '<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">' . "\r\n\t" . '<link rel="stylesheet" href="css/bootstrap-reboot.min.css">' . "\r\n\t" . '<link rel="stylesheet" href="css/bootstrap-grid.min.css">' . "\r\n\t" . '<link rel="stylesheet" href="css/default-skin.css">' . "\r\n\t" . '<link rel="stylesheet" href="css/main.css">' . "\r\n\t" . '<link rel="shortcut icon" href="img/favicon.ico">' . "\r\n\t" . '<title>';
-echo CoreUtilities::$rSettings['server_name'];
-echo '</title>' . "\r\n" . '</head>' . "\r\n" . '<body class="body" style="padding-bottom: 0 !important;">' . "\r\n\t" . '<div class="sign">' . "\r\n\t\t" . '<div class="container">' . "\r\n\t\t\t" . '<div class="row">' . "\r\n\t\t\t\t" . '<div class="col-12">' . "\r\n\t\t\t\t\t" . '<div class="sign__content">' . "\r\n" . '                        ';
-
-if (file_exists('install.php')) {
-	echo '                        <div class="alert bg-animate" style="color: #fff;padding-top: 80px; padding-bottom: 80px;">' . "\r\n" . '                            Installation has been completed!<br/><br/>Please delete <strong>install.php</strong> to continue.' . "\r\n" . '                        </div>' . "\r\n" . '                        ';
-} else {
-	echo "\t\t\t\t\t\t" . '<form action="./login.php" class="sign__form" method="post">' . "\r\n\t\t\t\t\t\t\t" . '<span class="sign__logo">' . "\r\n" . '                                <img src="img/logo.png" alt="" height="80px">' . "\r\n" . '                            </span>' . "\r\n\t\t\t\t\t\t\t" . '<div class="sign__group">' . "\r\n\t\t\t\t\t\t\t\t" . '<input type="text" name="username" class="sign__input" placeholder="Username">' . "\r\n\t\t\t\t\t\t\t" . '</div>' . "\r\n\t\t\t\t\t\t\t" . '<div class="sign__group">' . "\r\n\t\t\t\t\t\t\t\t" . '<input type="password" name="password" class="sign__input" placeholder="Password">' . "\r\n\t\t\t\t\t\t\t" . '</div>' . "\r\n" . '                            ';
-
-	if (!isset($_STATUS)) {
-	} else {
-		echo '                            <div class="alert alert-danger">' . "\r\n" . '                                ';
-		echo $rErrors[$_STATUS];
-		echo '                            </div>' . "\r\n" . '                            ';
-	}
-
-	echo '                            <button class="sign__btn" type="submit">LOGIN</button>' . "\r\n\t\t\t\t\t\t" . '</form>' . "\r\n" . '                        ';
-}
-
-
-echo "\t\t\t\t\t" . '</div>' . "\r\n\t\t\t\t" . '</div>' . "\r\n\t\t\t" . '</div>' . "\r\n\t\t" . '</div>' . "\r\n\t" . '</div>' . "\r\n\t" . '<script src="js/jquery-3.5.1.min.js"></script>' . "\r\n\t" . '<script src="js/bootstrap.bundle.min.js"></script>' . "\r\n" . '</body>' . "\r\n" . '</html>';
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="css/bootstrap-reboot.min.css">
+    <link rel="stylesheet" href="css/bootstrap-grid.min.css">
+    <link rel="stylesheet" href="css/default-skin.css">
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="shortcut icon" href="img/favicon.ico">
+    <title><?php echo CoreUtilities::$rSettings['server_name']; ?></title>
+</head>
+<body class="body" style="padding-bottom: 0 !important;">
+    <div class="sign">
+        <div class="container">
+            <div class="row">
+                <div class="col-12">
+                    <div class="sign__content">
+                    <?php if (file_exists('install.php')) { ?>
+                        <div class="alert bg-animate" style="color: #fff;padding-top: 80px; padding-bottom: 80px;">
+                            Installation has been completed!<br/><br/>Please delete <strong>install.php</strong> to continue.
+                        </div>
+                    <?php } else { ?>
+                        <form action="./login.php" class="sign__form" method="post">
+                            <span class="sign__logo">
+                                <img src="img/logo.png" alt="" height="80px">
+                            </span>
+                            <div class="sign__group">
+                                <input type="text" name="username" class="sign__input" placeholder="Username">
+                            </div>
+                            <div class="sign__group">
+                                <input type="password" name="password" class="sign__input" placeholder="Password">
+                            </div>
+                            <?php if (!is_null($rStatus)) { ?>
+                            <div class="alert alert-danger">
+                                <?php echo $rErrors[$rStatus]; ?>
+                            </div>
+                            <?php } ?>
+                            <button class="sign__btn" type="submit">LOGIN</button>
+                        </form>
+                    <?php } ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="js/jquery-3.5.1.min.js"></script>
+    <script src="js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

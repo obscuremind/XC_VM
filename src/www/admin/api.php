@@ -4,15 +4,38 @@ register_shutdown_function('shutdown');
 set_time_limit(0);
 require '../init.php';
 $rIP = CoreUtilities::getUserIP();
+$rAllowedIPs = CoreUtilities::getAllowedIPs();
+$rConfiguredIPs = (CoreUtilities::$rSettings['api_ips'] ?? array());
 
-if (in_array($rIP, CoreUtilities::getAllowedIPs()) || in_array($rIP, CoreUtilities::$rSettings['api_ips'])) {
-} else {
-	generate404();
+if (!is_array($rConfiguredIPs)) {
+        $rConfiguredIPs = array_filter(array_map('trim', explode(',', (string) $rConfiguredIPs)));
 }
 
-if (empty(CoreUtilities::$rSettings['api_pass']) || CoreUtilities::$rRequest['api_pass'] == CoreUtilities::$rSettings['api_pass']) {
-} else {
-	generate404();
+if ($rConfiguredIPs) {
+        $rAllowedIPs = array_unique(array_merge($rAllowedIPs, $rConfiguredIPs));
+}
+
+if (!in_array($rIP, $rAllowedIPs, true)) {
+        generate404();
+}
+
+$rRequestPass = (CoreUtilities::$rRequest['api_pass'] ?? null);
+$rApiPass = (CoreUtilities::$rSettings['api_pass'] ?? '');
+
+if ($rApiPass !== '') {
+        $rMatches = false;
+
+        if (is_string($rRequestPass)) {
+                if (function_exists('hash_equals')) {
+                        $rMatches = hash_equals((string) $rApiPass, $rRequestPass);
+                } else {
+                        $rMatches = ((string) $rApiPass === $rRequestPass);
+                }
+        }
+
+        if (!$rMatches) {
+                generate404();
+        }
 }
 
 $db = new Database($_INFO['username'], $_INFO['password'], $_INFO['database'], $_INFO['hostname'], $_INFO['port']);
@@ -20,15 +43,67 @@ CoreUtilities::$db = &$db;
 $rAction = (!empty(CoreUtilities::$rRequest['action']) ? CoreUtilities::$rRequest['action'] : '');
 $rSubAction = (!empty(CoreUtilities::$rRequest['sub']) ? CoreUtilities::$rRequest['sub'] : '');
 
+function normalizeIDList($rValue) {
+        if (is_string($rValue)) {
+                $rValue = array_filter(array_map('trim', explode(',', $rValue)), 'strlen');
+        }
+
+        if (!is_array($rValue)) {
+                return array();
+        }
+
+        $rIDs = array();
+
+        foreach ($rValue as $rID) {
+                $rID = intval($rID);
+
+                if (0 < $rID) {
+                        $rIDs[] = $rID;
+                }
+        }
+
+        return array_values(array_unique($rIDs));
+}
+
+function normalizeServerList($rValue) {
+        $rAllServers = array_keys((array) CoreUtilities::$rServers);
+
+        if (!$rAllServers) {
+                return array();
+        }
+
+        $rIDs = normalizeIDList($rValue);
+
+        if (!$rIDs) {
+                return $rAllServers;
+        }
+
+        $rAvailable = array();
+
+        foreach ($rIDs as $rServerID) {
+                if (isset(CoreUtilities::$rServers[$rServerID])) {
+                        $rAvailable[] = $rServerID;
+                }
+        }
+
+        return ($rAvailable ?: $rAllServers);
+}
+
 switch ($rAction) {
 	case 'server':
 		switch ($rSubAction) {
 			case 'list':
 				$rOutput = array();
 
-				foreach (CoreUtilities::$rServers as $rServerID => $rServerInfo) {
-					$rOutput[] = array('id' => $rServerID, 'server_name' => $rServerInfo['server_name'], 'online' => $rServerInfo['server_online'], 'info' => json_decode($rServerInfo['server_hardware'], true));
-				}
+                                foreach ((array) CoreUtilities::$rServers as $rServerID => $rServerInfo) {
+                                        if (!isset($rServerInfo['server_name'], $rServerInfo['server_online'])) {
+                                                continue;
+                                        }
+
+                                        $rHardware = (isset($rServerInfo['server_hardware']) ? json_decode($rServerInfo['server_hardware'], true) : null);
+
+                                        $rOutput[] = array('id' => $rServerID, 'server_name' => $rServerInfo['server_name'], 'online' => $rServerInfo['server_online'], 'info' => $rHardware);
+                                }
 				echo json_encode($rOutput);
 
 				break;
@@ -39,31 +114,63 @@ switch ($rAction) {
 	case 'vod':
 		switch ($rSubAction) {
 			case 'start':
-				$rStreamIDs = array_map('intval', CoreUtilities::$rRequest['stream_ids']);
-				$rForce = (CoreUtilities::$rRequest['force'] ?: false);
-				$rServers = (empty(CoreUtilities::$rRequest['servers']) ? array_keys(CoreUtilities::$rServers) : array_map('intval', CoreUtilities::$rRequest['servers']));
-				$rURLs = array();
+                                $rStreamIDs = normalizeIDList(CoreUtilities::$rRequest['stream_ids'] ?? array());
+                                $rForce = (!empty(CoreUtilities::$rRequest['force']));
+                                $rServers = normalizeServerList(CoreUtilities::$rRequest['servers'] ?? array());
 
-				foreach ($rServers as $rServerID) {
-					$rURLs[$rServerID] = array('url' => CoreUtilities::$rServers[$rServerID]['api_url_ip'] . '&action=vod', 'postdata' => array('function' => $rSubAction, 'stream_ids' => $rStreamIDs, 'force' => $rForce));
-				}
-				CoreUtilities::getMultiCURL($rURLs);
-				echo json_encode(array('result' => true));
+                                if (!$rStreamIDs || !$rServers) {
+                                        echo json_encode(array('result' => false, 'error' => 'INVALID_PARAMETERS'));
 
-				exit();
+                                        exit();
+                                }
+
+                                $rURLs = array();
+
+                                foreach ($rServers as $rServerID) {
+                                        if (empty(CoreUtilities::$rServers[$rServerID]['api_url_ip'])) {
+                                                continue;
+                                        }
+
+                                        $rURLs[$rServerID] = array('url' => CoreUtilities::$rServers[$rServerID]['api_url_ip'] . '&action=vod', 'postdata' => array('function' => $rSubAction, 'stream_ids' => $rStreamIDs, 'force' => $rForce));
+                                }
+                                if (!$rURLs) {
+                                        echo json_encode(array('result' => false, 'error' => 'NO_TARGET_SERVERS'));
+
+                                        exit();
+                                }
+                                CoreUtilities::getMultiCURL($rURLs);
+                                echo json_encode(array('result' => true));
+
+                                exit();
 
 			case 'stop':
-				$rStreamIDs = array_map('intval', CoreUtilities::$rRequest['stream_ids']);
-				$rServers = (empty(CoreUtilities::$rRequest['servers']) ? array_keys(CoreUtilities::$rServers) : array_map('intval', CoreUtilities::$rRequest['servers']));
-				$rURLs = array();
+                                $rStreamIDs = normalizeIDList(CoreUtilities::$rRequest['stream_ids'] ?? array());
+                                $rServers = normalizeServerList(CoreUtilities::$rRequest['servers'] ?? array());
 
-				foreach ($rServers as $rServerID) {
-					$rURLs[$rServerID] = array('url' => CoreUtilities::$rServers[$rServerID]['api_url_ip'] . '&action=vod', 'postdata' => array('function' => $rSubAction, 'stream_ids' => $rStreamIDs));
-				}
-				CoreUtilities::getMultiCURL($rURLs);
-				echo json_encode(array('result' => true));
+                                if (!$rStreamIDs || !$rServers) {
+                                        echo json_encode(array('result' => false, 'error' => 'INVALID_PARAMETERS'));
 
-				exit();
+                                        exit();
+                                }
+
+                                $rURLs = array();
+
+                                foreach ($rServers as $rServerID) {
+                                        if (empty(CoreUtilities::$rServers[$rServerID]['api_url_ip'])) {
+                                                continue;
+                                        }
+
+                                        $rURLs[$rServerID] = array('url' => CoreUtilities::$rServers[$rServerID]['api_url_ip'] . '&action=vod', 'postdata' => array('function' => $rSubAction, 'stream_ids' => $rStreamIDs));
+                                }
+                                if (!$rURLs) {
+                                        echo json_encode(array('result' => false, 'error' => 'NO_TARGET_SERVERS'));
+
+                                        exit();
+                                }
+                                CoreUtilities::getMultiCURL($rURLs);
+                                echo json_encode(array('result' => true));
+
+                                exit();
 		}
 
 		break;
@@ -71,30 +178,62 @@ switch ($rAction) {
 	case 'stream':
 		switch ($rSubAction) {
 			case 'start':
-				$rStreamIDs = array_map('intval', CoreUtilities::$rRequest['stream_ids']);
-				$rServers = (empty(CoreUtilities::$rRequest['servers']) ? array_keys(CoreUtilities::$rServers) : array_map('intval', CoreUtilities::$rRequest['servers']));
-				$rURLs = array();
+                                $rStreamIDs = normalizeIDList(CoreUtilities::$rRequest['stream_ids'] ?? array());
+                                $rServers = normalizeServerList(CoreUtilities::$rRequest['servers'] ?? array());
 
-				foreach ($rServers as $rServerID) {
-					$rURLs[$rServerID] = array('url' => CoreUtilities::$rServers[$rServerID]['api_url_ip'] . '&action=stream', 'postdata' => array('function' => $rSubAction, 'stream_ids' => $rStreamIDs));
-				}
-				CoreUtilities::getMultiCURL($rURLs);
-				echo json_encode(array('result' => true));
+                                if (!$rStreamIDs || !$rServers) {
+                                        echo json_encode(array('result' => false, 'error' => 'INVALID_PARAMETERS'));
 
-				exit();
+                                        exit();
+                                }
+
+                                $rURLs = array();
+
+                                foreach ($rServers as $rServerID) {
+                                        if (empty(CoreUtilities::$rServers[$rServerID]['api_url_ip'])) {
+                                                continue;
+                                        }
+
+                                        $rURLs[$rServerID] = array('url' => CoreUtilities::$rServers[$rServerID]['api_url_ip'] . '&action=stream', 'postdata' => array('function' => $rSubAction, 'stream_ids' => $rStreamIDs));
+                                }
+                                if (!$rURLs) {
+                                        echo json_encode(array('result' => false, 'error' => 'NO_TARGET_SERVERS'));
+
+                                        exit();
+                                }
+                                CoreUtilities::getMultiCURL($rURLs);
+                                echo json_encode(array('result' => true));
+
+                                exit();
 
 			case 'stop':
-				$rStreamIDs = array_map('intval', CoreUtilities::$rRequest['stream_ids']);
-				$rServers = (empty(CoreUtilities::$rRequest['servers']) ? array_keys(CoreUtilities::$rServers) : array_map('intval', CoreUtilities::$rRequest['servers']));
-				$rURLs = array();
+                                $rStreamIDs = normalizeIDList(CoreUtilities::$rRequest['stream_ids'] ?? array());
+                                $rServers = normalizeServerList(CoreUtilities::$rRequest['servers'] ?? array());
 
-				foreach ($rServers as $rServerID) {
-					$rURLs[$rServerID] = array('url' => CoreUtilities::$rServers[$rServerID]['api_url_ip'] . '&action=stream', 'postdata' => array('function' => $rSubAction, 'stream_ids' => $rStreamIDs));
-				}
-				CoreUtilities::getMultiCURL($rURLs);
-				echo json_encode(array('result' => true));
+                                if (!$rStreamIDs || !$rServers) {
+                                        echo json_encode(array('result' => false, 'error' => 'INVALID_PARAMETERS'));
 
-				exit();
+                                        exit();
+                                }
+
+                                $rURLs = array();
+
+                                foreach ($rServers as $rServerID) {
+                                        if (empty(CoreUtilities::$rServers[$rServerID]['api_url_ip'])) {
+                                                continue;
+                                        }
+
+                                        $rURLs[$rServerID] = array('url' => CoreUtilities::$rServers[$rServerID]['api_url_ip'] . '&action=stream', 'postdata' => array('function' => $rSubAction, 'stream_ids' => $rStreamIDs));
+                                }
+                                if (!$rURLs) {
+                                        echo json_encode(array('result' => false, 'error' => 'NO_TARGET_SERVERS'));
+
+                                        exit();
+                                }
+                                CoreUtilities::getMultiCURL($rURLs);
+                                echo json_encode(array('result' => true));
+
+                                exit();
 
 			case 'list':
 				$rOutput = array();
@@ -172,10 +311,9 @@ switch ($rAction) {
 		break;
 }
 function shutdown() {
-	global $db;
+        global $db;
 
-	if (!is_object($db)) {
-	} else {
-		$db->close_mysql();
-	}
+        if ($db instanceof Database) {
+                $db->close_mysql();
+        }
 }

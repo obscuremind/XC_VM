@@ -104,9 +104,11 @@ if ($rExtension) {
 				$rAvailableServers[] = array($rStream['info']['tv_archive_server_id']);
 			}
 		} else {
-			if (($rStream['info']['direct_source'] == 1 && $rStream['info']['direct_proxy'] == 0)) {
-				$rAvailableServers[] = $rServerID;
-			}
+                        if (($rStream['info']['direct_source'] == 1 && $rStream['info']['direct_proxy'] == 0)) {
+                                if (!in_array(SERVER_ID, $rAvailableServers, true)) {
+                                        $rAvailableServers[] = SERVER_ID;
+                                }
+                        }
 
 			foreach ($rServers as $rServerID => $rServerInfo) {
 				if (!(!array_key_exists($rServerID, $rStream['servers']) || !$rServerInfo['server_online'] || $rServerInfo['server_type'] != 0)) {
@@ -144,15 +146,28 @@ if ($rExtension) {
 	$rRestreamDetect = false;
 	$rPrebuffer = isset(CoreUtilities::$rRequest['prebuffer']);
 
-	foreach (getallheaders() as $rKey => $rValue) {
-		if (strtoupper($rKey) == 'X-XC_VM-DETECT') {
-			$rRestreamDetect = true;
-		} else {
-			if (strtoupper($rKey) == 'X-XC_VM-PREBUFFER') {
-				$rPrebuffer = true;
-			}
-		}
-	}
+        $rHeaders = array();
+
+        if (function_exists('getallheaders')) {
+                $rHeaders = getallheaders();
+        } else {
+                foreach ($_SERVER as $rHeader => $rValue) {
+                        if (strpos($rHeader, 'HTTP_') === 0) {
+                                $rHeaders[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($rHeader, 5)))))
+] = $rValue;
+                        }
+                }
+        }
+
+        foreach ($rHeaders as $rKey => $rValue) {
+                $rNormalizedKey = strtoupper(str_replace('-', '_', $rKey));
+
+                if ($rNormalizedKey == 'X_XC_VM_DETECT') {
+                        $rRestreamDetect = true;
+                } elseif ($rNormalizedKey == 'X_XC_VM_PREBUFFER') {
+                        $rPrebuffer = true;
+                }
+        }
 	$rIsEnigma = false;
 	$rUserInfo = null;
 	$rIsHMAC = null;

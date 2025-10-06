@@ -1,7 +1,9 @@
 <?php
 
 if (isset($rSkipVerify) || php_sapi_name() != 'cli') {
-	session_start();
+        if (session_status() === PHP_SESSION_NONE) {
+                session_start();
+        }
 
 	if (file_exists('config.php')) {
 		require_once 'config.php';
@@ -9,9 +11,9 @@ if (isset($rSkipVerify) || php_sapi_name() != 'cli') {
 
 	require_once 'libs/tmdb.php';
 
-	if (!$argc) {
-		define('HOST', trim(explode(':', $_SERVER['HTTP_HOST'])[0]));
-	}
+        if (!isset($argc) || !$argc) {
+                define('HOST', trim(explode(':', $_SERVER['HTTP_HOST'])[0]));
+        }
 
 	define('XC_VM_VERSION', '1.1.4');
 	define('MAIN_HOME', '/home/xc_vm/');
@@ -31,11 +33,17 @@ if (isset($rSkipVerify) || php_sapi_name() != 'cli') {
 
 	$_INFO = array();
 
-	if (file_exists(MAIN_HOME . 'config')) {
-		$_INFO = parse_ini_file(CONFIG_PATH . 'config.ini');
-	} else {
-		die('no config found');
-	}
+        $rConfigFile = CONFIG_PATH . 'config.ini';
+
+        if (file_exists($rConfigFile)) {
+                $_INFO = parse_ini_file($rConfigFile);
+        }
+
+        if (!is_array($_INFO) || empty($_INFO)) {
+                die('no config found');
+        } else {
+                $_INFO = array_map('trim', $_INFO);
+        }
 
 	$db = new Database($_INFO['username'], $_INFO['password'], $_INFO['database'], $_INFO['hostname'], $_INFO['port']);
 	CoreUtilities::$db = &$db;
