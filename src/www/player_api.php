@@ -33,7 +33,7 @@ $rUserAgent = trim($_SERVER['HTTP_USER_AGENT']);
 $rOffset = (empty(CoreUtilities::$rRequest['params']['offset']) ? 0 : abs(intval(CoreUtilities::$rRequest['params']['offset'])));
 $rLimit = (empty(CoreUtilities::$rRequest['params']['items_per_page']) ? 0 : abs(intval(CoreUtilities::$rRequest['params']['items_per_page'])));
 $rNameTypes = array('live' => 'Live Streams', 'movie' => 'Movies', 'created_live' => 'Created Channels', 'radio_streams' => 'Radio Stations', 'series' => 'TV Series');
-$rDomainName = CoreUtilities::getDomainName(true);
+$rDomainName = CoreUtilities::getDomainName();
 $rDomainParts = parse_url($rDomainName);
 $rDomain = (is_array($rDomainParts) && isset($rDomainParts['host']) ? $rDomainParts['host'] : $rDomainName);
 $rValidActions = array('get_epg', 200 => 'get_vod_categories', 201 => 'get_live_categories', 202 => 'get_live_streams', 203 => 'get_vod_streams', 204 => 'get_series_info', 205 => 'get_short_epg', 206 => 'get_series_categories', 207 => 'get_simple_data_table', 208 => 'get_series', 209 => 'get_vod_info');
