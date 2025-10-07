@@ -126,10 +126,34 @@ class CoreUtilities {
 			self::$db = null;
 		}
 	}
-	public static function getCache($rCache) {
-		$rData = (file_get_contents(CACHE_TMP_PATH . $rCache) ?: null);
-		return igbinary_unserialize($rData);
-	}
+        public static function getCache($rCache) {
+                return self::readIgbinaryFile(CACHE_TMP_PATH . $rCache);
+        }
+        public static function decodeIgbinary($rData, $rDefault = null) {
+                if (!is_string($rData) || $rData === '') {
+                        return $rDefault;
+                }
+
+                static $rSerializedFalse;
+                if ($rSerializedFalse === null) {
+                        $rSerializedFalse = igbinary_serialize(false);
+                }
+
+                $rDecoded = igbinary_unserialize($rData);
+                return ($rDecoded === false && $rData !== $rSerializedFalse) ? $rDefault : $rDecoded;
+        }
+        public static function readIgbinaryFile($rPath, $rDefault = null) {
+                if (!is_string($rPath) || $rPath === '' || !is_file($rPath)) {
+                        return $rDefault;
+                }
+
+                $rData = file_get_contents($rPath);
+                if (!is_string($rData) || $rData === '') {
+                        return $rDefault;
+                }
+
+                return self::decodeIgbinary($rData, $rDefault);
+        }
 	public static function mc_decrypt($rData, $rKey) {
 		$rData = explode('|', $rData . '|');
 		$rDecoded = base64_decode($rData[0]);
@@ -148,24 +172,23 @@ class CoreUtilities {
 		}
 		return false;
 	}
-	public static function cleanGlobals(&$rData, $rIteration = 0) {
-		if (10 > $rIteration) {
-			foreach ($rData as $rKey => $rValue) {
-				if (is_array($rValue)) {
-					self::cleanGlobals($rData[$rKey], ++$rIteration);
-				} else {
-					$rValue = str_replace(chr('0'), '', $rValue);
-					$rValue = str_replace("\x0", '', $rValue);
-					$rValue = str_replace("\x0", '', $rValue);
-					$rValue = str_replace('../', '&#46;&#46;/', $rValue);
-					$rValue = str_replace('&#8238;', '', $rValue);
-					$rData[$rKey] = $rValue;
-				}
-			}
-		} else {
-			return null;
-		}
-	}
+        public static function cleanGlobals(&$rData, $rIteration = 0) {
+                if ($rIteration >= 10) {
+                        return;
+                }
+
+                foreach ($rData as $rKey => $rValue) {
+                        if (is_array($rValue)) {
+                                self::cleanGlobals($rData[$rKey], $rIteration + 1);
+                                continue;
+                        }
+
+                        $rValue = str_replace("\0", '', $rValue);
+                        $rValue = str_replace('../', '&#46;&#46;/', $rValue);
+                        $rValue = str_replace('&#8238;', '', $rValue);
+                        $rData[$rKey] = $rValue;
+                }
+        }
 	public static function parseIncomingRecursively(&$rData, $rInput = array(), $rIteration = 0) {
 		if (20 > $rIteration) {
 			if (is_array($rData)) {
@@ -391,9 +414,12 @@ class CoreUtilities {
 		return json_decode(file_get_contents(CACHE_TMP_PATH . (($rProxy ? 'proxy_capacity' : 'servers_capacity'))), true);
 	}
 	public static function redirectStream($rStreamID, $rExtension, $rUserInfo, $rCountryCode, $rUserISP = '', $rType = '') {
-		if (self::$rCached) {
-			$rStream = (igbinary_unserialize(file_get_contents(STREAMS_TMP_PATH . 'stream_' . $rStreamID)) ?: null);
-			$rStream['bouquets'] = self::getBouquetMap($rStreamID);
+                if (self::$rCached) {
+                        $rStream = self::readIgbinaryFile(STREAMS_TMP_PATH . 'stream_' . $rStreamID);
+                        if (!is_array($rStream)) {
+                                $rStream = array();
+                        }
+                        $rStream['bouquets'] = self::getBouquetMap($rStreamID);
 		} else {
 			$rStream = self::getStreamData($rStreamID);
 		}
@@ -743,13 +769,15 @@ class CoreUtilities {
 			$rConnections = array();
 			$rKeys = self::getConnections($rUserID, true, true);
 			$rToKill = count($rKeys) - $rMaxConnections;
-			if ($rToKill > 0) {
-				foreach (array_map('igbinary_unserialize', self::$redis->mGet($rKeys)) as $rConnection) {
-					if (!is_array($rConnection)) {
-					} else {
-						$rConnections[] = $rConnection;
-					}
-				}
+                        if ($rToKill > 0) {
+                                foreach (self::$redis->mGet($rKeys) as $rPayload) {
+                                        $rConnection = self::decodeIgbinary($rPayload);
+                                        if (!is_array($rConnection)) {
+                                                continue;
+                                        }
+
+                                        $rConnections[] = $rConnection;
+                                }
 				unset($rKeys);
 				$rDate = array_column($rConnections, 'date_start');
 				array_multisort($rDate, SORT_ASC, $rConnections);
@@ -865,9 +893,9 @@ class CoreUtilities {
 						self::$db->query('SELECT * FROM `lines_live` WHERE `activity_id` = ?', $rActivityInfo);
 					}
 					$rActivityInfo = self::$db->get_row();
-				} else {
-					$rActivityInfo = igbinary_unserialize(self::$redis->get($rActivityInfo));
-				}
+                                } else {
+                                        $rActivityInfo = self::decodeIgbinary(self::$redis->get($rActivityInfo));
+                                }
 			}
 			if (is_array($rActivityInfo)) {
 				if ($rActivityInfo['container'] == 'rtmp') {
@@ -947,10 +975,14 @@ class CoreUtilities {
 		}
 		if ($rType != 'series') {
 		} else {
-			if (self::$rCached) {
-				$rSeries = igbinary_unserialize(file_get_contents(SERIES_TMP_PATH . 'series_map'));
-				return in_array($rSeries[$rStreamID], $rIDs);
-			}
+                        if (self::$rCached) {
+                                $rSeries = self::readIgbinaryFile(SERIES_TMP_PATH . 'series_map', array());
+                                if (!isset($rSeries[$rStreamID])) {
+                                        return false;
+                                }
+
+                                return in_array($rSeries[$rStreamID], $rIDs);
+                        }
 			self::$db->query('SELECT series_id FROM `streams_episodes` WHERE `stream_id` = ? LIMIT 1', $rStreamID);
 			if (0 >= self::$db->num_rows()) {
 			} else {
@@ -982,10 +1014,10 @@ class CoreUtilities {
 					}
 				}
 			}
-			if (!$rUserID) {
-			} else {
-				$rUserInfo = igbinary_unserialize(file_get_contents(LINES_TMP_PATH . 'line_i_' . $rUserID));
-			}
+                        if (!$rUserID) {
+                        } else {
+                                $rUserInfo = self::readIgbinaryFile(LINES_TMP_PATH . 'line_i_' . $rUserID);
+                        }
 		} else {
 			if (empty($rPassword) && empty($rUserID) && strlen($rUsername) == 32) {
 				self::$db->query('SELECT * FROM `lines` WHERE `is_mag` = 0 AND `is_e2` = 0 AND `access_token` = ? AND LENGTH(`access_token`) = 32', $rUsername);
@@ -1039,8 +1071,8 @@ class CoreUtilities {
 		$rUserInfo['allowed_ua'] = @array_filter(@array_map('trim', @json_decode($rUserInfo['allowed_ua'], true)));
 		$rUserInfo['allowed_outputs'] = array_map('intval', json_decode($rUserInfo['allowed_outputs'], true));
 		$rUserInfo['output_formats'] = array();
-		if (self::$rCached) {
-			foreach (igbinary_unserialize(file_get_contents(CACHE_TMP_PATH . 'output_formats')) as $rRow) {
+                if (self::$rCached) {
+                        foreach (self::readIgbinaryFile(CACHE_TMP_PATH . 'output_formats', array()) as $rRow) {
 				if (!in_array(intval($rRow['access_output_id']), $rUserInfo['allowed_outputs'])) {
 				} else {
 					$rUserInfo['output_formats'][] = $rRow['output_key'];
@@ -1118,10 +1150,10 @@ class CoreUtilities {
 			$rUserInfo['live_ids'] = array_map('intval', array_unique($rLiveIDs));
 			$rUserInfo['radio_ids'] = array_map('intval', array_unique($rRadioIDs));
 		}
-		$rAllowedCategories = array();
-		$rCategoryMap = igbinary_unserialize(file_get_contents(CACHE_TMP_PATH . 'category_map'));
-		foreach ($rUserInfo['bouquet'] as $rID) {
-			$rAllowedCategories = array_merge($rAllowedCategories, ($rCategoryMap[$rID] ?: array()));
+                $rAllowedCategories = array();
+                $rCategoryMap = self::readIgbinaryFile(CACHE_TMP_PATH . 'category_map', array());
+                foreach ($rUserInfo['bouquet'] as $rID) {
+                        $rAllowedCategories = array_merge($rAllowedCategories, ($rCategoryMap[$rID] ?? array()));
 		}
 		$rUserInfo['category_ids'] = array_values(array_unique($rAllowedCategories));
 		return $rUserInfo;
@@ -1138,8 +1170,8 @@ class CoreUtilities {
 			}
 		}
 		$rKeyID = null;
-		if (self::$rCached) {
-			$rKeys = igbinary_unserialize(file_get_contents(CACHE_TMP_PATH . 'hmac_keys'));
+                if (self::$rCached) {
+                        $rKeys = self::readIgbinaryFile(CACHE_TMP_PATH . 'hmac_keys', array());
 		} else {
 			$rKeys = array();
 			self::$db->query('SELECT `id`, `key` FROM `hmac_keys` WHERE `enabled` = 1;');
@@ -1484,12 +1516,12 @@ class CoreUtilities {
 			}
 		}
 	}
-	public static function getBouquetMap($rStreamID) {
-		$rBouquetMap = igbinary_unserialize(file_get_contents(CACHE_TMP_PATH . 'bouquet_map'));
-		$rReturn = ($rBouquetMap[$rStreamID] ?: array());
-		unset($rBouquetMap);
-		return $rReturn;
-	}
+        public static function getBouquetMap($rStreamID) {
+                $rBouquetMap = self::readIgbinaryFile(CACHE_TMP_PATH . 'bouquet_map', array());
+                $rReturn = ($rBouquetMap[$rStreamID] ?? array());
+                unset($rBouquetMap);
+                return $rReturn;
+        }
 	public static function getStreamData($rStreamID) {
 		$rOutput = array();
 		self::$db->query('SELECT * FROM `streams` t1 LEFT JOIN `streams_types` t2 ON t2.type_id = t1.type WHERE t1.`id` = ?', $rStreamID);
@@ -1521,30 +1553,30 @@ class CoreUtilities {
 	}
 	public static function addToQueue($rStreamID, $rAddPID) {
 		$rActivePIDs = $rPIDs = array();
-		if (!file_exists(SIGNALS_TMP_PATH . 'queue_' . intval($rStreamID))) {
-		} else {
-			$rPIDs = igbinary_unserialize(file_get_contents(SIGNALS_TMP_PATH . 'queue_' . intval($rStreamID)));
-		}
+                if (!file_exists(SIGNALS_TMP_PATH . 'queue_' . intval($rStreamID))) {
+                } else {
+                        $rPIDs = self::readIgbinaryFile(SIGNALS_TMP_PATH . 'queue_' . intval($rStreamID), array());
+                }
 		foreach ($rPIDs as $rPID) {
 			if (!self::isProcessRunning($rPID, 'php-fpm')) {
 			} else {
 				$rActivePIDs[] = $rPID;
 			}
 		}
-		if (in_array($rActivePIDs, $rAddPID)) {
-		} else {
-			$rActivePIDs[] = $rAddPID;
-		}
-		file_put_contents(SIGNALS_TMP_PATH . 'queue_' . intval($rStreamID), igbinary_serialize($rActivePIDs));
-	}
-	public static function removeFromQueue($rStreamID, $rPID) {
-		$rActivePIDs = array();
-		foreach ((igbinary_unserialize(file_get_contents(SIGNALS_TMP_PATH . 'queue_' . intval($rStreamID))) ?: array()) as $rActivePID) {
-			if (!(self::isProcessRunning($rActivePID, 'php-fpm') && $rPID != $rActivePID)) {
-			} else {
-				$rActivePIDs[] = $rActivePID;
-			}
-		}
+                if (in_array($rAddPID, $rActivePIDs, true)) {
+                } else {
+                        $rActivePIDs[] = $rAddPID;
+                }
+                file_put_contents(SIGNALS_TMP_PATH . 'queue_' . intval($rStreamID), igbinary_serialize($rActivePIDs));
+        }
+        public static function removeFromQueue($rStreamID, $rPID) {
+                $rActivePIDs = array();
+                foreach (self::readIgbinaryFile(SIGNALS_TMP_PATH . 'queue_' . intval($rStreamID), array()) as $rActivePID) {
+                        if (!(self::isProcessRunning($rActivePID, 'php-fpm') && $rPID != $rActivePID)) {
+                        } else {
+                                $rActivePIDs[] = $rActivePID;
+                        }
+                }
 		if (0 < count($rActivePIDs)) {
 			file_put_contents(SIGNALS_TMP_PATH . 'queue_' . intval($rStreamID), igbinary_serialize($rActivePIDs));
 		} else {
@@ -1576,11 +1608,11 @@ class CoreUtilities {
 		return $rTitle;
 	}
 	public static function sortChannels($rChannels) {
-		if (!(0 < count($rChannels) && file_exists(CACHE_TMP_PATH . 'channel_order') && self::$rSettings['channel_number_type'] != 'bouquet')) {
-		} else {
-			$rOrder = igbinary_unserialize(file_get_contents(CACHE_TMP_PATH . 'channel_order'));
-			$rChannels = array_flip($rChannels);
-			$rNewOrder = array();
+                if (!(0 < count($rChannels) && file_exists(CACHE_TMP_PATH . 'channel_order') && self::$rSettings['channel_number_type'] != 'bouquet')) {
+                } else {
+                        $rOrder = self::readIgbinaryFile(CACHE_TMP_PATH . 'channel_order', array());
+                        $rChannels = array_flip($rChannels);
+                        $rNewOrder = array();
 			foreach ($rOrder as $rID) {
 				if (!isset($rChannels[$rID])) {
 				} else {
@@ -1595,10 +1627,10 @@ class CoreUtilities {
 		return $rChannels;
 	}
 	public static function sortSeries($rSeries) {
-		if (!(0 < count($rSeries) && file_exists(CACHE_TMP_PATH . 'series_order'))) {
-		} else {
-			$rOrder = igbinary_unserialize(file_get_contents(CACHE_TMP_PATH . 'series_order'));
-			$rSeries = array_flip($rSeries);
+                if (!(0 < count($rSeries) && file_exists(CACHE_TMP_PATH . 'series_order'))) {
+                } else {
+                        $rOrder = self::readIgbinaryFile(CACHE_TMP_PATH . 'series_order', array());
+                        $rSeries = array_flip($rSeries);
 			$rNewOrder = array();
 			foreach ($rOrder as $rID) {
 				if (!isset($rSeries[$rID])) {
@@ -1650,13 +1682,13 @@ class CoreUtilities {
 		}
 		return true;
 	}
-	public static function getConnection($rUUID) {
-		if (is_object(self::$redis)) {
-		} else {
-			self::connectRedis();
-		}
-		return igbinary_unserialize(self::$redis->get($rUUID));
-	}
+        public static function getConnection($rUUID) {
+                if (is_object(self::$redis)) {
+                } else {
+                        self::connectRedis();
+                }
+                return self::decodeIgbinary(self::$redis->get($rUUID));
+        }
 	public static function createConnection($rData) {
 		if (!is_object(self::$redis)) {
 			self::connectRedis();
@@ -1732,20 +1764,31 @@ class CoreUtilities {
 			return $rData;
 		}
 	}
-	public static function getConnections($rUserID, $rActive = false, $rKeys = false) {
-		if (is_object(self::$redis)) {
-		} else {
-			self::connectRedis();
-		}
-		$rKeys = self::$redis->zRangeByScore((($rActive ? 'LINE#' : 'LINE_ALL#')) . $rUserID, '-inf', '+inf');
-		if ($rKeys) {
-			return $rKeys;
-		}
-		if (0 >= count($rKeys)) {
-			return array();
-		}
-		return array_map('igbinary_unserialize', self::$redis->mGet($rKeys));
-	}
+        public static function getConnections($rUserID, $rActive = false, $rReturnKeys = false) {
+                if (is_object(self::$redis)) {
+                } else {
+                        self::connectRedis();
+                }
+                $rKeys = self::$redis->zRangeByScore((($rActive ? 'LINE#' : 'LINE_ALL#')) . $rUserID, '-inf', '+inf');
+                if ($rReturnKeys) {
+                        return ($rKeys ?: array());
+                }
+                if (empty($rKeys)) {
+                        return array();
+                }
+
+                $rConnections = array();
+                foreach (self::$redis->mGet($rKeys) as $rPayload) {
+                        $rConnection = self::decodeIgbinary($rPayload);
+                        if ($rConnection === null) {
+                                continue;
+                        }
+
+                        $rConnections[] = $rConnection;
+                }
+
+                return $rConnections;
+        }
 	public static function redisSignal($rPID, $rServerID, $rRTMP, $rCustomData = null) {
 		if (is_object(self::$redis)) {
 		} else {

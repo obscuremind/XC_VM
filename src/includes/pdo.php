@@ -100,50 +100,70 @@ class Database {
 		return $r;
 	}
 
-	public function query($query, $buffered = false) {
-		if (!$this->dbh) {
-			return false;
-		}
+        public function query($query, $buffered = false) {
+                if (!$this->dbh) {
+                        return false;
+                }
 
 
-		$numargs = func_num_args();
-		$arg_list = func_get_args();
-		$next_arg_list = array();
-		$i = 1;
+                $numargs = func_num_args();
+                $arg_list = func_get_args();
+                $next_arg_list = array();
+                $i = 1;
 
-		while ($i < $numargs) {
-			if (is_null($arg_list[$i]) || strtolower($arg_list[$i]) == 'null') {
-				$next_arg_list[] = null;
-			} else {
-				$next_arg_list[] = $arg_list[$i];
-			}
+                while ($i < $numargs) {
+                        if (is_null($arg_list[$i]) || strtolower($arg_list[$i]) == 'null') {
+                                $next_arg_list[] = null;
+                        } else {
+                                $next_arg_list[] = $arg_list[$i];
+                        }
 
-			$i++;
-		}
+                        $i++;
+                }
 
-		if ($buffered === true) {
-			$this->dbh->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, false);
-		}
+                $previousBuffered = null;
 
-		try {
-			$this->result = $this->dbh->prepare($query);
-			$this->result->execute($next_arg_list);
-		} catch (Exception $e) {
-			$actual_query = trim(explode("\n", explode('Sent SQL:', $this->debugString($this->result))[1])[0]);
+                if ($buffered === true) {
+                        try {
+                                $previousBuffered = $this->dbh->getAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY);
+                                $this->dbh->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, false);
+                        } catch (Exception $e) {
+                                $previousBuffered = null;
+                        }
+                }
 
-			if (strlen($actual_query) == 0) {
-				$actual_query = $query;
-			}
+                try {
+                        $this->result = $this->dbh->prepare($query);
+                        $this->result->execute($next_arg_list);
+                } catch (Exception $e) {
+                        $actual_query = $query;
 
-			if (class_exists('CoreUtilities')) {
-				CoreUtilities::saveLog('pdo', $e->getMessage(), $actual_query);
-			}
+                        if ($this->result instanceof PDOStatement) {
+                                $debug = $this->debugString($this->result);
+                                $parts = explode('Sent SQL:', $debug);
 
-			return false;
-		}
+                                if (isset($parts[1])) {
+                                        $candidate = trim(explode("\n", $parts[1])[0]);
 
-		return true;
-	}
+                                        if (strlen($candidate) > 0) {
+                                                $actual_query = $candidate;
+                                        }
+                                }
+                        }
+
+                        if (class_exists('CoreUtilities')) {
+                                CoreUtilities::saveLog('pdo', $e->getMessage(), $actual_query);
+                        }
+
+                        return false;
+                } finally {
+                        if ($buffered === true && $previousBuffered !== null) {
+                                $this->dbh->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, $previousBuffered);
+                        }
+                }
+
+                return true;
+        }
 
 	public function simple_query($query) {
 		try {
