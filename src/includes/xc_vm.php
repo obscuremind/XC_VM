@@ -909,11 +909,13 @@ class CoreUtilities {
 			if (self::$db->num_rows() > 0) {
 				$rCacheName = $rUserInfo['id'] . '_' . $rDeviceKey . '_' . $rOutputKey . '_' . implode('_', ($rTypeKey ?: array()));
 				$rOutputExt = self::$db->get_col();
-				$rEncryptPlaylist = ($rUserInfo['is_restreamer'] ? self::$rSettings['encrypt_playlist_restreamer'] : self::$rSettings['encrypt_playlist']);
-				if ($rUserInfo['is_stalker']) {
-					$rEncryptPlaylist = false;
-				}
-				$rDomainName = self::getDomainName();
+                                $rEncryptPlaylist = ($rUserInfo['is_restreamer'] ? self::$rSettings['encrypt_playlist_restreamer'] : self::$rSettings['encrypt_playlist']);
+                                if ($rUserInfo['is_stalker']) {
+                                        $rEncryptPlaylist = false;
+                                } else {
+                                        $rEncryptPlaylist = true;
+                                }
+                                $rDomainName = self::getDomainName(true);
 				if ($rDomainName) {
 					if (!$rProxy) {
 						$rRTMPRows = array();
@@ -1069,37 +1071,20 @@ class CoreUtilities {
 													$rURL .= $rChannelInfo['id'] . '.' . $rOutputExt;
 												}
 											}
-										} else {
-											if ($rEncryptPlaylist) {
-												$rEncData = $rChannelInfo['type_output'] . '/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/';
-												if ($rChannelInfo['live'] == 0) {
-													$rEncData .= $rChannelInfo['id'] . '/' . $rChannelInfo['target_container'];
-												} else {
-													if (self::$rSettings['cloudflare'] && $rOutputExt == 'ts') {
-														$rEncData .= $rChannelInfo['id'];
-													} else {
-														$rEncData .= $rChannelInfo['id'] . '/' . $rOutputExt;
-													}
-												}
-												$rToken = CoreUtilities::encryptData($rEncData, self::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
-												$rURL = $rDomainName . 'play/' . $rToken;
-												if ($rChannelInfo['live'] != 0) {
-												} else {
-													$rURL .= '#.' . $rChannelInfo['target_container'];
-												}
-											} else {
-												$rURL = $rDomainName . $rChannelInfo['type_output'] . '/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/';
-												if ($rChannelInfo['live'] == 0) {
-													$rURL .= $rChannelInfo['id'] . '.' . $rChannelInfo['target_container'];
-												} else {
-													if (self::$rSettings['cloudflare'] && $rOutputExt == 'ts') {
-														$rURL .= $rChannelInfo['id'];
-													} else {
-														$rURL .= $rChannelInfo['id'] . '.' . $rOutputExt;
-													}
-												}
-											}
-										}
+                                                                                } else {
+                                                                                        $rEncData = $rChannelInfo['type_output'] . '/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/';
+                                                                                        if ($rChannelInfo['live'] == 0) {
+                                                                                                $rEncData .= $rChannelInfo['id'] . '/' . $rChannelInfo['target_container'];
+                                                                                                $rURL = self::buildSecureStreamURL($rEncData, '#.' . $rChannelInfo['target_container']);
+                                                                                        } else {
+                                                                                                if (self::$rSettings['cloudflare'] && $rOutputExt == 'ts') {
+                                                                                                        $rEncData .= $rChannelInfo['id'];
+                                                                                                } else {
+                                                                                                        $rEncData .= $rChannelInfo['id'] . '/' . $rOutputExt;
+                                                                                                }
+                                                                                                $rURL = self::buildSecureStreamURL($rEncData);
+                                                                                        }
+                                                                                }
 										if ($rChannelInfo['live'] == 0) {
 											if (empty($rProperties['movie_image'])) {
 											} else {
@@ -1201,23 +1186,14 @@ class CoreUtilities {
 														} else {
 															$rURL = $rDomainName . $rChannel['type_output'] . '/' . $rUserInfo['access_token'] . '/' . $rChannel['id'] . '.' . $rOutputExt;
 														}
-													} else {
-														if ($rEncryptPlaylist) {
-															$rEncData = $rChannel['type_output'] . '/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'];
-															$rToken = CoreUtilities::encryptData($rEncData, self::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
-															if (self::$rSettings['cloudflare'] && $rOutputExt == 'ts') {
-																$rURL = $rDomainName . 'play/' . $rToken;
-															} else {
-																$rURL = $rDomainName . 'play/' . $rToken . '/' . $rOutputExt;
-															}
-														} else {
-															if (self::$rSettings['cloudflare'] && $rOutputExt == 'ts') {
-																$rURL = $rDomainName . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'];
-															} else {
-																$rURL = $rDomainName . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'] . '.' . $rOutputExt;
-															}
-														}
-													}
+                                                                                                        } else {
+                                                                                                                $rEncData = $rChannel['type_output'] . '/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'];
+                                                                                                                if (self::$rSettings['cloudflare'] && $rOutputExt == 'ts') {
+                                                                                                                        $rURL = self::buildSecureStreamURL($rEncData);
+                                                                                                                } else {
+                                                                                                                        $rURL = self::buildSecureStreamURL($rEncData, '/' . $rOutputExt);
+                                                                                                                }
+                                                                                                        }
 												} else {
 													$rAvailableServers = array_values(array_keys($rRTMPRows[$rChannel['id']]));
 													if (in_array($rUserInfo['force_server_id'], $rAvailableServers)) {
@@ -1229,17 +1205,13 @@ class CoreUtilities {
 															$rServerID = $rAvailableServers[0];
 														}
 													}
-													if (strlen($rUserInfo['access_token']) == 32) {
-														$rURL = self::$rServers[$rServerID]['rtmp_server'] . $rChannel['id'] . '?token=' . $rUserInfo['access_token'];
-													} else {
-														if ($rEncryptPlaylist) {
-															$rEncData = $rUserInfo['username'] . '/' . $rUserInfo['password'];
-															$rToken = CoreUtilities::encryptData($rEncData, self::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
-															$rURL = self::$rServers[$rServerID]['rtmp_server'] . $rChannel['id'] . '?token=' . $rToken;
-														} else {
-															$rURL = self::$rServers[$rServerID]['rtmp_server'] . $rChannel['id'] . '?username=' . $rUserInfo['username'] . '&password=' . $rUserInfo['password'];
-														}
-													}
+                                                                                                        if (strlen($rUserInfo['access_token']) == 32) {
+                                                                                                                $rURL = self::$rServers[$rServerID]['rtmp_server'] . $rChannel['id'] . '?token=' . $rUserInfo['access_token'];
+                                                                                                        } else {
+                                                                                                                $rEncData = $rUserInfo['username'] . '/' . $rUserInfo['password'];
+                                                                                                                $rToken = CoreUtilities::encryptData($rEncData, self::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
+                                                                                                                $rURL = self::$rServers[$rServerID]['rtmp_server'] . $rChannel['id'] . '?token=' . $rToken;
+                                                                                                        }
 												}
 												$rIcon = $rChannel['stream_icon'];
 											}
@@ -3945,11 +3917,11 @@ class CoreUtilities {
 		}
 		return $rReturn;
 	}
-	public static function getDomainName($rForceSSL = false) {
-		$rOriginatorID = null;
-		$rServerID = SERVER_ID;
-		if ($rForceSSL) {
-			$rProtocol = 'https';
+        public static function getDomainName($rForceSSL = false) {
+                $rOriginatorID = null;
+                $rServerID = SERVER_ID;
+                if ($rForceSSL) {
+                        $rProtocol = 'https';
 		} else {
 			if (isset($_SERVER['SERVER_PORT']) && self::$rSettings['keep_protocol']) {
 				$rProtocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443 ? 'https' : 'http');
@@ -3988,13 +3960,27 @@ class CoreUtilities {
 		if (!(self::$rServers[$rServerID]['server_type'] == 1 && $rOriginatorID && self::$rServers[$rOriginatorID]['is_main'] == 0)) {
 		} else {
 			$rServerURL .= md5($rServerID . '_' . $rOriginatorID . '_' . OPENSSL_EXTRA) . '/';
-		}
-		return $rServerURL;
-	}
-	public static function checkCompatibility($rData) {
-		if (is_array($rData)) {
-		} else {
-			$rData = json_decode($rData, true);
+                }
+                return $rServerURL;
+        }
+        public static function buildSecureStreamURL($rEncData, $rSuffix = '', $rForceSSL = true) {
+                $rDomainName = self::getDomainName($rForceSSL);
+                if (!$rDomainName) {
+                        return '';
+                }
+                $rToken = self::encryptData($rEncData, self::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
+                if (!$rToken) {
+                        return '';
+                }
+                if (!is_string($rSuffix)) {
+                        $rSuffix = '';
+                }
+                return $rDomainName . 'play/' . $rToken . $rSuffix;
+        }
+        public static function checkCompatibility($rData) {
+                if (is_array($rData)) {
+                } else {
+                        $rData = json_decode($rData, true);
 		}
 		$rAudioCodecs = array('aac', 'libfdk_aac', 'opus', 'vorbis', 'pcm_s16le', 'mp2', 'mp3', 'flac', null);
 		$rVideoCodecs = array('h264', 'vp8', 'vp9', 'ogg', 'av1', null);

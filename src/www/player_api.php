@@ -196,13 +196,8 @@ if ($rUserInfo) {
 						$rEpisodeData = $rEpisode;
 					}
 
-					if (CoreUtilities::$rSettings['api_redirect']) {
-						$rEncData = 'series/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rEpisodeData['id'] . '/' . $rEpisodeData['target_container'];
-						$rToken = CoreUtilities::encryptData($rEncData, CoreUtilities::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
-						$rURL = $rDomainName . 'play/' . $rToken;
-					} else {
-						$rURL = '';
-					}
+                                        $rEncData = 'series/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rEpisodeData['id'] . '/' . $rEpisodeData['target_container'];
+                                        $rURL = CoreUtilities::buildSecureStreamURL($rEncData);
 
 					$rProperties = (!empty($rEpisodeData['movie_properties']) ? json_decode($rEpisodeData['movie_properties'], true) : '');
 					$rProperties['cover_big'] = CoreUtilities::validateImage($rProperties['cover_big']);
@@ -529,26 +524,19 @@ if ($rUserInfo) {
 							$rStreamIcon = (CoreUtilities::validateImage($rChannel['stream_icon']) ?: '');
 							$rTVArchive = (!empty($rChannel['tv_archive_server_id']) && !empty($rChannel['tv_archive_duration']) ? 1 : 0);
 
-							if (CoreUtilities::$rSettings['api_redirect']) {
-								$rEncData = 'live/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'];
-								$rToken = CoreUtilities::encryptData($rEncData, CoreUtilities::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
+                                                        $rEncData = 'live/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'];
+                                                        if (CoreUtilities::$rSettings['cloudflare'] && CoreUtilities::$rSettings['api_container'] == 'ts') {
+                                                                $rURL = CoreUtilities::buildSecureStreamURL($rEncData);
+                                                        } else {
+                                                                $rURL = CoreUtilities::buildSecureStreamURL($rEncData, '/' . CoreUtilities::$rSettings['api_container']);
+                                                        }
 
-								if (CoreUtilities::$rSettings['cloudflare'] && CoreUtilities::$rSettings['api_container'] == 'ts') {
-									$rURL = $rDomainName . 'play/' . $rToken;
-								} else {
-									$rURL = $rDomainName . 'play/' . $rToken . '/' . CoreUtilities::$rSettings['api_container'];
-								}
-							} else {
-								$rURL = '';
-							}
-
-							if ($rChannel['vframes_server_id']) {
-								$rEncData = 'thumb/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'];
-								$rToken = CoreUtilities::encryptData($rEncData, CoreUtilities::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
-								$rThumbURL = $rDomainName . 'play/' . $rToken;
-							} else {
-								$rThumbURL = '';
-							}
+                                                        if ($rChannel['vframes_server_id']) {
+                                                                $rEncData = 'thumb/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'];
+                                                                $rThumbURL = CoreUtilities::buildSecureStreamURL($rEncData);
+                                                        } else {
+                                                                $rThumbURL = '';
+                                                        }
 
 							$output[] = array('num' => ++$rLiveNum, 'name' => $rChannel['stream_display_name'], 'stream_type' => $rChannel['type_key'], 'stream_id' => (int) $rChannel['id'], 'stream_icon' => $rStreamIcon, 'epg_channel_id' => $rChannel['channel_id'], 'added' => ($rChannel['added'] ?: ''), 'custom_sid' => strval($rChannel['custom_sid']), 'tv_archive' => $rTVArchive, 'direct_source' => $rURL, 'tv_archive_duration' => ($rTVArchive ? intval($rChannel['tv_archive_duration']) : 0), 'category_id' => strval($rCategoryID), 'category_ids' => $rCategoryIDs, 'thumbnail' => $rThumbURL);
 						}
@@ -576,13 +564,8 @@ if ($rUserInfo) {
 				}
 
 				if ($rRow) {
-					if (CoreUtilities::$rSettings['api_redirect']) {
-						$rEncData = 'movie/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rRow['id'] . '/' . $rRow['target_container'];
-						$rToken = CoreUtilities::encryptData($rEncData, CoreUtilities::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
-						$rURL = $rDomainName . 'play/' . $rToken;
-					} else {
-						$rURL = '';
-					}
+                                        $rEncData = 'movie/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rRow['id'] . '/' . $rRow['target_container'];
+                                        $rURL = CoreUtilities::buildSecureStreamURL($rEncData);
 
 					$output['info'] = json_decode($rRow['movie_properties'], true);
 					$output['info']['tmdb_id'] = intval($output['info']['tmdb_id']);
@@ -667,14 +650,9 @@ if ($rUserInfo) {
 
 					foreach ($rCategoryIDs as $rCategoryID) {
 
-						if (!$rCategoryIDSearch || $rCategoryIDSearch == $rCategoryID) {
-							if (CoreUtilities::$rSettings['api_redirect']) {
-								$rEncData = 'movie/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'] . '/' . $rChannel['target_container'];
-								$rToken = CoreUtilities::encryptData($rEncData, CoreUtilities::$rSettings['live_streaming_pass'], OPENSSL_EXTRA);
-								$rURL = $rDomainName . 'play/' . $rToken;
-							} else {
-								$rURL = '';
-							}
+                                                if (!$rCategoryIDSearch || $rCategoryIDSearch == $rCategoryID) {
+                                                        $rEncData = 'movie/' . $rUserInfo['username'] . '/' . $rUserInfo['password'] . '/' . $rChannel['id'] . '/' . $rChannel['target_container'];
+                                                        $rURL = CoreUtilities::buildSecureStreamURL($rEncData);
 
 							$output[] = array('num' => ++$rMovieNum, 'name' => CoreUtilities::formatTitle($rChannel['stream_display_name'], $rChannel['year']), 'title' => $rChannel['stream_display_name'], 'year' => $rChannel['year'], 'stream_type' => $rChannel['type_key'], 'stream_id' => (int) $rChannel['id'], 'stream_icon' => (CoreUtilities::validateImage($rProperties['movie_image']) ?: ''), 'rating' => number_format($rProperties['rating'], 1) + 0, 'rating_5based' => number_format($rProperties['rating'] * 0.5, 1) + 0, 'added' => ($rChannel['added'] ?: ''), 'plot' => $rProperties['plot'], 'cast' => $rProperties['cast'], 'director' => $rProperties['director'], 'genre' => $rProperties['genre'], 'release_date' => $rProperties['release_date'], 'youtube_trailer' => $rProperties['youtube_trailer'], 'episode_run_time' => $rProperties['episode_run_time'], 'category_id' => strval($rCategoryID), 'category_ids' => $rCategoryIDs, 'container_extension' => $rChannel['target_container'], 'custom_sid' => strval($rChannel['custom_sid']), 'direct_source' => $rURL);
 						}

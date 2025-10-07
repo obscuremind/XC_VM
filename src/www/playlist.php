@@ -4,165 +4,163 @@ register_shutdown_function('shutdown');
 require 'init.php';
 set_time_limit(0);
 header('Access-Control-Allow-Origin: *');
-$rDeny = true;
 
-if (strtolower(explode('.', ltrim(parse_url($_SERVER['REQUEST_URI'])['path'], '/'))[0]) == 'get' || !CoreUtilities::$rSettings['legacy_get']) {
-	$rDeny = false;
-	generateError('LEGACY_GET_DISABLED');
+$rDeny = true;
+$rDownloading = false;
+$db = null;
+$rUserInfo = null;
+$loginIdentifier = null;
+
+$requestUri = $_SERVER['REQUEST_URI'] ?? '';
+$requestPath = ltrim(parse_url($requestUri, PHP_URL_PATH) ?? '', '/');
+$scriptBase = strtolower(explode('.', $requestPath, 2)[0] ?? '');
+
+if ($scriptBase === 'get' || empty(CoreUtilities::$rSettings['legacy_get'])) {
+        $rDeny = false;
+        generateError('LEGACY_GET_DISABLED');
 }
 
-$rDownloading = false;
 $rIP = CoreUtilities::getUserIP();
-$rCountryCode = CoreUtilities::getIPInfo($rIP)['country']['iso_code'];
-$rUserAgent = (empty($_SERVER['HTTP_USER_AGENT']) ? '' : htmlentities(trim($_SERVER['HTTP_USER_AGENT'])));
-$rDeviceKey = (empty(CoreUtilities::$rRequest['type']) ? 'm3u_plus' : CoreUtilities::$rRequest['type']);
-$rTypeKey = (empty(CoreUtilities::$rRequest['key']) ? null : explode(',', CoreUtilities::$rRequest['key']));
-$rOutputKey = (empty(CoreUtilities::$rRequest['output']) ? '' : CoreUtilities::$rRequest['output']);
+$ipInfo = CoreUtilities::getIPInfo($rIP);
+$rCountryCode = $ipInfo['country']['iso_code'] ?? null;
+$rUserAgent = isset($_SERVER['HTTP_USER_AGENT']) ? htmlentities(trim($_SERVER['HTTP_USER_AGENT'])) : '';
+$rDeviceKey = CoreUtilities::$rRequest['type'] ?? 'm3u_plus';
+$rTypeKey = isset(CoreUtilities::$rRequest['key']) && CoreUtilities::$rRequest['key'] !== '' ? explode(',', CoreUtilities::$rRequest['key']) : null;
+$rOutputKey = CoreUtilities::$rRequest['output'] ?? '';
 $rNoCache = !empty(CoreUtilities::$rRequest['nocache']);
 
-if (isset(CoreUtilities::$rRequest['username']) && isset(CoreUtilities::$rRequest['password'])) {
-	$rUsername = CoreUtilities::$rRequest['username'];
-	$rPassword = CoreUtilities::$rRequest['password'];
+if (isset(CoreUtilities::$rRequest['username'], CoreUtilities::$rRequest['password'])) {
+        $rUsername = trim(CoreUtilities::$rRequest['username']);
+        $rPassword = trim(CoreUtilities::$rRequest['password']);
+        $loginIdentifier = $rUsername;
 
-	if (empty($rUsername) || empty($rPassword)) {
-		generateError('NO_CREDENTIALS');
-	}
+        if ($rUsername === '' || $rPassword === '') {
+                generateError('NO_CREDENTIALS');
+        }
 
-	$rUserInfo = CoreUtilities::getUserInfo(null, $rUsername, $rPassword, true, false, $rIP);
+        $rUserInfo = CoreUtilities::getUserInfo(null, $rUsername, $rPassword, true, false, $rIP);
+} elseif (!empty(CoreUtilities::$rRequest['token'])) {
+        $loginIdentifier = CoreUtilities::$rRequest['token'];
+        $rUserInfo = CoreUtilities::getUserInfo(null, $loginIdentifier, null, true, false, $rIP);
 } else {
-	if (isset(CoreUtilities::$rRequest['token'])) {
-		$rToken = CoreUtilities::$rRequest['token'];
-
-		if (empty($rToken)) {
-			generateError('NO_CREDENTIALS');
-		}
-
-		$rUserInfo = CoreUtilities::getUserInfo(null, $rToken, null, true, false, $rIP);
-	} else {
-		generateError('NO_CREDENTIALS');
-	}
+        generateError('NO_CREDENTIALS');
 }
 
 ini_set('memory_limit', -1);
 
-if ($rUserInfo) {
-	$rDeny = false;
+if (!$rUserInfo) {
+        CoreUtilities::checkBruteforce(null, null, $loginIdentifier);
+        generateError('INVALID_CREDENTIALS');
+}
 
-	if (!$rUserInfo['is_restreamer'] && CoreUtilities::$rSettings['disable_playlist']) {
-		generateError('PLAYLIST_DISABLED');
-	}
+$rDeny = false;
 
-	if ($rUserInfo['is_restreamer'] && CoreUtilities::$rSettings['disable_playlist_restreamer']) {
-		generateError('PLAYLIST_DISABLED');
-	}
+if (empty($rUserInfo['is_restreamer']) && !empty(CoreUtilities::$rSettings['disable_playlist'])) {
+        generateError('PLAYLIST_DISABLED');
+}
 
-	if ($rUserInfo['bypass_ua'] == 0) {
-		if (CoreUtilities::checkBlockedUAs($rUserAgent, true)) {
-			generateError('BLOCKED_USER_AGENT');
-		}
-	}
+if (!empty($rUserInfo['is_restreamer']) && !empty(CoreUtilities::$rSettings['disable_playlist_restreamer'])) {
+        generateError('PLAYLIST_DISABLED');
+}
 
-	if (is_null($rUserInfo['exp_date']) || $rUserInfo['exp_date'] > time()) {
-	} else {
-		generateError('EXPIRED');
-	}
+if (isset($rUserInfo['bypass_ua']) && intval($rUserInfo['bypass_ua']) === 0 && CoreUtilities::checkBlockedUAs($rUserAgent, true)) {
+        generateError('BLOCKED_USER_AGENT');
+}
 
-	if (!($rUserInfo['is_mag'] || $rUserInfo['is_e2'])) {
-	} else {
-		generateError('DEVICE_NOT_ALLOWED');
-	}
+$expDate = $rUserInfo['exp_date'] ?? null;
+if (!is_null($expDate) && $expDate <= time()) {
+        generateError('EXPIRED');
+}
 
-	if ($rUserInfo['admin_enabled']) {
-	} else {
-		generateError('BANNED');
-	}
+if (!empty($rUserInfo['is_mag']) || !empty($rUserInfo['is_e2'])) {
+        generateError('DEVICE_NOT_ALLOWED');
+}
 
-	if ($rUserInfo['enabled']) {
-	} else {
-		generateError('DISABLED');
-	}
+if (empty($rUserInfo['admin_enabled'])) {
+        generateError('BANNED');
+}
 
-	if (!CoreUtilities::$rSettings['restrict_playlists']) {
-	} else {
-		if (!(empty($rUserAgent) && CoreUtilities::$rSettings['disallow_empty_user_agents'] == 1)) {
-		} else {
-			generateError('EMPTY_USER_AGENT');
-		}
+if (empty($rUserInfo['enabled'])) {
+        generateError('DISABLED');
+}
 
-		if (empty($rUserInfo['allowed_ips']) || in_array($rIP, array_map('gethostbyname', $rUserInfo['allowed_ips']))) {
-		} else {
-			generateError('NOT_IN_ALLOWED_IPS');
-		}
+if (!empty(CoreUtilities::$rSettings['restrict_playlists'])) {
+        if ($rUserAgent === '' && (CoreUtilities::$rSettings['disallow_empty_user_agents'] ?? 0) == 1) {
+                generateError('EMPTY_USER_AGENT');
+        }
 
-		if (empty($rCountryCode)) {
-		} else {
-			$rForceCountry = !empty($rUserInfo['forced_country']);
+        $allowedIps = $rUserInfo['allowed_ips'] ?? array();
+        if (!empty($allowedIps)) {
+                $resolvedIps = array_map('gethostbyname', $allowedIps);
 
-			if (!($rForceCountry && $rUserInfo['forced_country'] != 'ALL' && $rCountryCode != $rUserInfo['forced_country'])) {
-			} else {
-				generateError('FORCED_COUNTRY_INVALID');
-			}
+                if (!in_array($rIP, $resolvedIps, true)) {
+                        generateError('NOT_IN_ALLOWED_IPS');
+                }
+        }
 
-			if ($rForceCountry || in_array('ALL', CoreUtilities::$rSettings['allow_countries']) || in_array($rCountryCode, CoreUtilities::$rSettings['allow_countries'])) {
-			} else {
-				generateError('NOT_IN_ALLOWED_COUNTRY');
-			}
-		}
+        if (!empty($rCountryCode)) {
+                $forcedCountry = $rUserInfo['forced_country'] ?? null;
+                $hasForcedCountry = !empty($forcedCountry);
 
-		if (empty($rUserInfo['allowed_ua']) || in_array($rUserAgent, $rUserInfo['allowed_ua'])) {
-		} else {
-			generateError('NOT_IN_ALLOWED_UAS');
-		}
+                if ($hasForcedCountry && $forcedCountry !== 'ALL' && $rCountryCode !== $forcedCountry) {
+                        generateError('FORCED_COUNTRY_INVALID');
+                }
 
-		if ($rUserInfo['isp_violate'] != 1) {
-		} else {
-			generateError('ISP_BLOCKED');
-		}
+                $allowedCountries = CoreUtilities::$rSettings['allow_countries'] ?? array();
+                if (!$hasForcedCountry
+                        && !in_array('ALL', $allowedCountries, true)
+                        && !in_array($rCountryCode, $allowedCountries, true)) {
+                        generateError('NOT_IN_ALLOWED_COUNTRY');
+                }
+        }
 
-		if ($rUserInfo['isp_is_server'] != 1 || $rUserInfo['is_restreamer']) {
-		} else {
-			generateError('ASN_BLOCKED');
-		}
-	}
+        $allowedUserAgents = $rUserInfo['allowed_ua'] ?? array();
+        if (!empty($allowedUserAgents) && !in_array($rUserAgent, $allowedUserAgents, true)) {
+                generateError('NOT_IN_ALLOWED_UAS');
+        }
 
-	$rDownloading = true;
+        if (isset($rUserInfo['isp_violate']) && intval($rUserInfo['isp_violate']) === 1) {
+                generateError('ISP_BLOCKED');
+        }
 
-	if (CoreUtilities::startDownload('playlist', $rUserInfo, getmypid())) {
-		$db = new Database($_INFO['username'], $_INFO['password'], $_INFO['database'], $_INFO['hostname'], $_INFO['port']);
-		CoreUtilities::$db = &$db;
+        if (isset($rUserInfo['isp_is_server'])
+                && intval($rUserInfo['isp_is_server']) === 1
+                && empty($rUserInfo['is_restreamer'])) {
+                generateError('ASN_BLOCKED');
+        }
+}
 
-		if (!CoreUtilities::generatePlaylist($rUserInfo, $rDeviceKey, $rOutputKey, $rTypeKey, $rNoCache, CoreUtilities::isProxy($_SERVER['HTTP_X_IP']))) {
-			generateError('GENERATE_PLAYLIST_FAILED');
-		}
-	} else {
-		generateError('DOWNLOAD_LIMIT_REACHED', false);
-		http_response_code(429);
+$rDownloading = true;
 
-		exit();
-	}
+if (CoreUtilities::startDownload('playlist', $rUserInfo, getmypid())) {
+        $db = new Database($_INFO['username'], $_INFO['password'], $_INFO['database'], $_INFO['hostname'], $_INFO['port']);
+        CoreUtilities::$db = &$db;
+
+        $isProxy = CoreUtilities::isProxy($_SERVER['HTTP_X_IP'] ?? null);
+        if (!CoreUtilities::generatePlaylist($rUserInfo, $rDeviceKey, $rOutputKey, $rTypeKey, $rNoCache, $isProxy)) {
+                generateError('GENERATE_PLAYLIST_FAILED');
+        }
 } else {
-	CoreUtilities::checkBruteforce(null, null, $rUsername);
-	generateError('INVALID_CREDENTIALS');
+        generateError('DOWNLOAD_LIMIT_REACHED', false);
+        http_response_code(429);
+        exit();
 }
 
 function shutdown() {
-	global $db;
-	global $rDeny;
-	global $rDownloading;
-	global $rUserInfo;
+        global $db;
+        global $rDeny;
+        global $rDownloading;
+        global $rUserInfo;
 
-	if (!$rDeny) {
-	} else {
-		CoreUtilities::checkFlood();
-	}
+        if ($rDeny) {
+                CoreUtilities::checkFlood();
+        }
 
-	if (!is_object($db)) {
-	} else {
-		$db->close_mysql();
-	}
+        if (is_object($db)) {
+                $db->close_mysql();
+        }
 
-	if (!$rDownloading) {
-	} else {
-		CoreUtilities::stopDownload('playlist', $rUserInfo, getmypid());
-	}
+        if ($rDownloading) {
+                CoreUtilities::stopDownload('playlist', $rUserInfo, getmypid());
+        }
 }
