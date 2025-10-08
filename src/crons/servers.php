@@ -122,7 +122,8 @@ function loadCron() {
             $rUsers = $rServers[SERVER_ID]['users'];
             $rAllUsers = 0;
             foreach (array_keys($rServers) as $rServerID) {
-                if ($rServers[$rServerID]['server_online']) {
+                if (CoreUtilities::isHostOffline($rServers[$rServerID])) {
+                } else {
                     $rAllUsers += $rServers[$rServerID]['users'];
                 }
             }

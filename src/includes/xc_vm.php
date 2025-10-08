@@ -16,11 +16,137 @@ class CoreUtilities {
 	public static $rProxies = array();
 	public static $rAllowedDomains = array();
 	public static $rCategories = array();
-	public static $rFFMPEG_CPU = null;
-	public static $rFFMPEG_GPU = null;
-	public static $rFFPROBE = null;
-	public static $rCached = null;
-	public static function init($rUseCache = false) {
+        public static $rFFMPEG_CPU = null;
+        public static $rFFMPEG_GPU = null;
+        public static $rFFPROBE = null;
+        public static $rCached = null;
+
+        private static function hostHas($server, $key)
+        {
+                if (is_array($server)) {
+                        return array_key_exists($key, $server);
+                }
+
+                if ($server instanceof \ArrayAccess) {
+                        return $server->offsetExists($key);
+                }
+
+                return false;
+        }
+
+        private static function hostGet($server, $key, $default = null)
+        {
+                if (is_array($server)) {
+                        return array_key_exists($key, $server) ? $server[$key] : $default;
+                }
+
+                if ($server instanceof \ArrayAccess) {
+                        return $server->offsetExists($key) ? $server[$key] : $default;
+                }
+
+                return $default;
+        }
+
+        /**
+         * Determine if a single host entry should be treated as offline when dispatching work.
+         * Cached "server_online" flags are treated as hints so fresh metadata can still mark
+         * a host offline when its state changes mid-request.
+         *
+         * @param mixed $server
+         * @return bool True when the host should be skipped for operational tasks.
+         */
+        public static function isHostOffline($server)
+        {
+                if (!is_array($server) && !($server instanceof \ArrayAccess)) {
+                        return false;
+                }
+
+                $assumedOnline = true;
+
+                if (self::hostHas($server, 'server_online')) {
+                        // Cached health checks set this flag. Only short-circuit when it
+                        // already marks the host as offline so new heuristics can override
+                        // stale "online" values.
+                        $assumedOnline = !empty(self::hostGet($server, 'server_online'));
+
+                        if (!$assumedOnline) {
+                                return true;
+                        }
+                }
+
+                if (self::hostHas($server, 'enabled') && empty(self::hostGet($server, 'enabled'))) {
+                        return true;
+                }
+
+                if (!self::hostHas($server, 'status')) {
+                        return !$assumedOnline;
+                }
+
+                $status = intval(self::hostGet($server, 'status'));
+                $allowedStatuses = array(1);
+
+                if (!in_array($status, $allowedStatuses, true)) {
+                        return true;
+                }
+
+                if (!self::hostHas($server, 'last_check_ago')) {
+                        return !$assumedOnline;
+                }
+
+                $lastCheck = intval(self::hostGet($server, 'last_check_ago'));
+
+                if ($lastCheck <= 0) {
+                        return true;
+                }
+
+                if (defined('SERVER_ID') && self::hostHas($server, 'id') && intval(self::hostGet($server, 'id')) === SERVER_ID) {
+                        return false;
+                }
+
+                $threshold = (intval(self::hostGet($server, 'server_type')) === 1 ? 180 : 90);
+
+                if ((time() - $lastCheck) > $threshold) {
+                        return true;
+                }
+
+                return !$assumedOnline;
+        }
+
+        /**
+         * Determine if any hosts in the provided list are offline for alerting purposes.
+         * Disabled hosts and entries in transitional states are ignored.
+         *
+         * @param mixed $servers
+         * @return bool
+         */
+        public static function hasOfflineHosts($servers)
+        {
+                if (!is_array($servers) && !($servers instanceof \Traversable)) {
+                        return false;
+                }
+
+                foreach ($servers as $server) {
+                        if (!self::isHostOffline($server)) {
+                                continue;
+                        }
+
+                        if (self::hostHas($server, 'enabled') && empty(self::hostGet($server, 'enabled'))) {
+                                continue;
+                        }
+
+                        $status = self::hostHas($server, 'status') ? intval(self::hostGet($server, 'status')) : null;
+
+                        if ($status !== null && in_array($status, array(3, 5), true)) {
+                                continue;
+                        }
+
+                        return true;
+                }
+
+                return false;
+        }
+
+        public static function init($rUseCache = false) {
 		if (!empty($_GET)) {
 			self::cleanGlobals($_GET);
 		}
@@ -338,8 +464,7 @@ class CoreUtilities {
 		}
 		self::$db->query('SELECT * FROM `servers`');
 		$rServers = array();
-		$rOnlineStatus = array(1);
-		foreach (self::$db->get_rows() as $rRow) {
+                foreach (self::$db->get_rows() as $rRow) {
 			if (empty($rRow['domain_name'])) {
 				$rURL = escapeshellcmd($rRow['server_ip']);
 			} else {
@@ -378,13 +503,8 @@ class CoreUtilities {
 			} else {
 				$rRow['allow_http'] = true;
 			}
-			if ($rRow['server_type'] == 1) {
-				$rLastCheckTime = 180;
-			} else {
-				$rLastCheckTime = 90;
-			}
-			$rRow['watchdog'] = json_decode($rRow['watchdog_data'], true);
-			$rRow['server_online'] = $rRow['enabled'] && in_array($rRow['status'], $rOnlineStatus) && time() - $rRow['last_check_ago'] <= $rLastCheckTime || SERVER_ID == $rRow['id'];
+                        $rRow['watchdog'] = json_decode($rRow['watchdog_data'], true);
+                        $rRow['server_online'] = !self::isHostOffline($rRow);
 			if (!isset($rRow['order'])) {
 				$rRow['order'] = 0;
 			}
@@ -399,26 +519,32 @@ class CoreUtilities {
 			$rCurl = array();
 			$rResults = array();
 			$rMulti = curl_multi_init();
-			foreach ($rURLs as $rKey => $rValue) {
-				if (self::$rServers[$rKey]['server_online']) {
-					$rCurl[$rKey] = curl_init();
-					curl_setopt($rCurl[$rKey], CURLOPT_URL, $rValue['url']);
-					curl_setopt($rCurl[$rKey], CURLOPT_RETURNTRANSFER, true);
-					curl_setopt($rCurl[$rKey], CURLOPT_FOLLOWLOCATION, true);
-					curl_setopt($rCurl[$rKey], CURLOPT_CONNECTTIMEOUT, 5);
-					curl_setopt($rCurl[$rKey], CURLOPT_TIMEOUT, $rTimeout);
-					curl_setopt($rCurl[$rKey], CURLOPT_SSL_VERIFYHOST, 0);
-					curl_setopt($rCurl[$rKey], CURLOPT_SSL_VERIFYPEER, 0);
-					if ($rValue['postdata'] == null) {
-					} else {
-						curl_setopt($rCurl[$rKey], CURLOPT_POST, true);
-						curl_setopt($rCurl[$rKey], CURLOPT_POSTFIELDS, http_build_query($rValue['postdata']));
-					}
-					curl_multi_add_handle($rMulti, $rCurl[$rKey]);
-				} else {
-					$rOffline[] = $rKey;
-				}
-			}
+                        foreach ($rURLs as $rKey => $rValue) {
+                                if (!isset(self::$rServers[$rKey])) {
+                                        $rOffline[] = $rKey;
+                                        continue;
+                                }
+
+                                if (self::isHostOffline(self::$rServers[$rKey])) {
+                                        $rOffline[] = $rKey;
+                                        continue;
+                                }
+
+                                $rCurl[$rKey] = curl_init();
+                                curl_setopt($rCurl[$rKey], CURLOPT_URL, $rValue['url']);
+                                curl_setopt($rCurl[$rKey], CURLOPT_RETURNTRANSFER, true);
+                                curl_setopt($rCurl[$rKey], CURLOPT_FOLLOWLOCATION, true);
+                                curl_setopt($rCurl[$rKey], CURLOPT_CONNECTTIMEOUT, 5);
+                                curl_setopt($rCurl[$rKey], CURLOPT_TIMEOUT, $rTimeout);
+                                curl_setopt($rCurl[$rKey], CURLOPT_SSL_VERIFYHOST, 0);
+                                curl_setopt($rCurl[$rKey], CURLOPT_SSL_VERIFYPEER, 0);
+                                if ($rValue['postdata'] == null) {
+                                } else {
+                                        curl_setopt($rCurl[$rKey], CURLOPT_POST, true);
+                                        curl_setopt($rCurl[$rKey], CURLOPT_POSTFIELDS, http_build_query($rValue['postdata']));
+                                }
+                                curl_multi_add_handle($rMulti, $rCurl[$rKey]);
+                        }
 			$rActive = null;
 			do {
 				$rMultiExec = curl_multi_exec($rMulti, $rActive);
@@ -1370,42 +1496,57 @@ class CoreUtilities {
 		}
 		return false;
 	}
-	public static function serverRequest($rServerID, $rURL, $rPostData = array()) {
-		if (self::$rServers[$rServerID]['server_online']) {
-			$rOutput = false;
-			$i = 1;
-			while ($i <= 2) {
-				$rCurl = curl_init();
-				curl_setopt($rCurl, CURLOPT_URL, $rURL);
-				curl_setopt($rCurl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:9.0) Gecko/20100101 Firefox/9.0');
-				curl_setopt($rCurl, CURLOPT_HEADER, 0);
-				curl_setopt($rCurl, CURLOPT_RETURNTRANSFER, true);
-				curl_setopt($rCurl, CURLOPT_CONNECTTIMEOUT, 10);
-				curl_setopt($rCurl, CURLOPT_TIMEOUT, 10);
-				curl_setopt($rCurl, CURLOPT_FOLLOWLOCATION, true);
-				curl_setopt($rCurl, CURLOPT_FRESH_CONNECT, true);
-				curl_setopt($rCurl, CURLOPT_FORBID_REUSE, true);
-				curl_setopt($rCurl, CURLOPT_SSL_VERIFYHOST, 0);
-				curl_setopt($rCurl, CURLOPT_SSL_VERIFYPEER, 0);
-				if (empty($rPostData)) {
-				} else {
-					curl_setopt($rCurl, CURLOPT_POST, true);
-					curl_setopt($rCurl, CURLOPT_POSTFIELDS, http_build_query($rPostData));
-				}
-				$rOutput = curl_exec($rCurl);
-				$rResponseCode = curl_getinfo($rCurl, CURLINFO_HTTP_CODE);
-				$rError = curl_errno($rCurl);
-				@curl_close($rCurl);
-				if ($rError != 0 || $rResponseCode != 200) {
-					$i++;
-					break;
-				}
-			}
-			return $rOutput;
-		}
-		return false;
-	}
-	public static function deleteCache($rSources) {
+        public static function serverRequest($rServerID, $rURL, $rPostData = array()) {
+                if (!isset(self::$rServers[$rServerID])) {
+                        return false;
+                }
+
+                if (self::isHostOffline(self::$rServers[$rServerID])) {
+                        return false;
+                }
+
+                $rOutput = false;
+                $i = 1;
+
+                while ($i <= 2) {
+                        $rCurl = curl_init();
+                        curl_setopt($rCurl, CURLOPT_URL, $rURL);
+                        curl_setopt($rCurl, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:9.0) Gecko/20100101 Firefox/9.0');
+                        curl_setopt($rCurl, CURLOPT_HEADER, 0);
+                        curl_setopt($rCurl, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($rCurl, CURLOPT_CONNECTTIMEOUT, 10);
+                        curl_setopt($rCurl, CURLOPT_TIMEOUT, 10);
+                        curl_setopt($rCurl, CURLOPT_FOLLOWLOCATION, true);
+                        curl_setopt($rCurl, CURLOPT_FRESH_CONNECT, true);
+                        curl_setopt($rCurl, CURLOPT_FORBID_REUSE, true);
+                        curl_setopt($rCurl, CURLOPT_SSL_VERIFYHOST, 0);
+                        curl_setopt($rCurl, CURLOPT_SSL_VERIFYPEER, 0);
+
+                        if (!empty($rPostData)) {
+                                curl_setopt($rCurl, CURLOPT_POST, true);
+                                curl_setopt($rCurl, CURLOPT_POSTFIELDS, http_build_query($rPostData));
+                        }
+
+                        $rOutput = curl_exec($rCurl);
+                        $rResponseCode = curl_getinfo($rCurl, CURLINFO_HTTP_CODE);
+                        $rError = curl_errno($rCurl);
+                        @curl_close($rCurl);
+
+                        if ($rError != 0 || $rResponseCode != 200) {
+                                $i++;
+                                break;
+                        }
+
+                        $i++;
+                }
+
+                if (!isset($rError) || $rError != 0) {
+                        return false;
+                }
+
+                return $rOutput;
+        }
+        public static function deleteCache($rSources) {
 		if (!empty($rSources)) {
 			foreach ($rSources as $rSource) {
 				if (!file_exists(CACHE_TMP_PATH . md5($rSource))) {
@@ -3393,19 +3534,23 @@ class CoreUtilities {
 		if (self::$rSettings['redis_handler']) {
 			$rRows = array();
 			$rMulti = self::$redis->multi();
-			foreach (array_keys(self::$rServers) as $rServerID) {
-				if (self::$rServers[$rServerID]['server_online']) {
-					$rMulti->zCard((($rProxy ? 'PROXY#' : 'SERVER#')) . $rServerID);
-				}
-			}
+                        foreach (array_keys(self::$rServers) as $rServerID) {
+                                if (self::isHostOffline(self::$rServers[$rServerID])) {
+                                        continue;
+                                }
+
+                                $rMulti->zCard((($rProxy ? 'PROXY#' : 'SERVER#')) . $rServerID);
+                        }
 			$rResults = $rMulti->exec();
 			$i = 0;
-			foreach (array_keys(self::$rServers) as $rServerID) {
-				if (self::$rServers[$rServerID]['server_online']) {
-					$rRows[$rServerID] = array('online_clients' => ($rResults[$i] ?: 0));
-					$i++;
-				}
-			}
+                        foreach (array_keys(self::$rServers) as $rServerID) {
+                                if (self::isHostOffline(self::$rServers[$rServerID])) {
+                                        continue;
+                                }
+
+                                $rRows[$rServerID] = array('online_clients' => ($rResults[$i] ?: 0));
+                                $i++;
+                        }
 		} else {
 			if ($rProxy) {
 				self::$db->query('SELECT `proxy_id`, COUNT(*) AS `online_clients` FROM `lines_live` WHERE `proxy_id` <> 0 AND `hls_end` = 0 GROUP BY `proxy_id`;');
@@ -4139,14 +4284,23 @@ class CoreUtilities {
 	}
 	public static function getProxies($rServerID, $rOnline = true) {
 		$rReturn = array();
-		foreach (self::$rServers as $rProxyID => $rServerInfo) {
-			if (!($rServerInfo['server_type'] == 1 && in_array($rServerID, $rServerInfo['parent_id']) && ($rServerInfo['server_online'] || !$rOnline))) {
-			} else {
-				$rReturn[$rProxyID] = $rServerInfo;
-			}
-		}
-		return $rReturn;
-	}
+                foreach (self::$rServers as $rProxyID => $rServerInfo) {
+                        if ($rServerInfo['server_type'] != 1) {
+                                continue;
+                        }
+
+                        if (!in_array($rServerID, $rServerInfo['parent_id'])) {
+                                continue;
+                        }
+
+                        if ($rOnline && self::isHostOffline($rServerInfo)) {
+                                continue;
+                        }
+
+                        $rReturn[$rProxyID] = $rServerInfo;
+                }
+                return $rReturn;
+        }
 
 	/**
 	 * Encodes the input data using base64url encoding.

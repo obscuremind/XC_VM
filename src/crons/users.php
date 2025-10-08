@@ -261,7 +261,7 @@ function loadCron() {
                                     if ($rConnection['server_id'] == SERVER_ID) {
                                         $rIsRunning = CoreUtilities::isProcessRunning($rConnection['pid'], 'php-fpm');
                                     } else {
-                                        if ($rConnection['date_start'] <= CoreUtilities::$rServers[$rConnection['server_id']]['last_check_ago'] - 1 && 0 < count($rPHPPIDs[$rConnection['server_id']])) {
+                                        if (isset(CoreUtilities::$rServers[$rConnection['server_id']]) && !CoreUtilities::isHostOffline(CoreUtilities::$rServers[$rConnection['server_id']]) && isset($rPHPPIDs[$rConnection['server_id']]) && $rConnection['date_start'] <= CoreUtilities::$rServers[$rConnection['server_id']]['last_check_ago'] - 1 && 0 < count($rPHPPIDs[$rConnection['server_id']])) {
                                             $rIsRunning = in_array(intval($rConnection['pid']), $rPHPPIDs[$rConnection['server_id']]);
                                         } else {
                                             $rIsRunning = true;

@@ -11,7 +11,7 @@ if (posix_getpwuid(posix_geteuid())['name'] == 'xc_vm') {
             CoreUtilities::connectRedis();
         }
         while (true && $db && $db->ping()) {
-            if (!$rLastCheck && $rInterval < time() - $rLastCheck) {
+            if (!$rLastCheck || $rInterval < time() - $rLastCheck) {
                 if (CoreUtilities::isRunning()) {
                     if (md5_file(__FILE__) == $rMD5) {
                         CoreUtilities::$rSettings = CoreUtilities::getSettings(true);

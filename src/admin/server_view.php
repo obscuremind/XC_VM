@@ -18,6 +18,8 @@ if (isset($allServers[CoreUtilities::$rRequest['id']])) {
     exit();
 }
 
+$rIsOffline = CoreUtilities::isHostOffline($rServer);
+
 $rWatchdog = json_decode($rServer['watchdog_data'], true);
 $rServer['gpu_info'] = json_decode($rServer['gpu_info'], true);
 $rStats = array('cpu' => array(), 'memory' => array(), 'io' => array(), 'input' => array(), 'output' => array(), 'dates' => array(null, null));
@@ -217,7 +219,7 @@ include 'header.php'; ?>
                 </div>
                 <div class="card-box">
                     <div class="col-md-12 align-self-center">
-                        <?php if ($rServer['server_online']): ?>
+                        <?php if (!$rIsOffline): ?>
                             <h5 class="mb-1 mt-0">CPU Usage<small class="text-muted ml-2">of
                                     <?php echo $rWatchdog['cpu_cores']; ?> Cores</small></h5>
                             <div class="progress-w-percent" id="watchdog_cpu">

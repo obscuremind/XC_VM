@@ -1223,8 +1223,9 @@ if ($rType == 'streams') {
                             } else {
                                 $rServerName .= " &nbsp; <button title=\"View All Servers\" onClick=\"viewSources('" . str_replace("'", "\\'", $rRow['stream_display_name']) . "', " . intval($rRow['id']) . ");\" type='button' class='tooltip-left btn btn-info btn-xs waves-effect waves-light'>+ " . ($rServerCount[$rRow['id']] - 1) . '</button>';
                             }
-                            if ($rServers[$rRow['server_id']]['last_status'] == 1) {
-                            } else {
+                            $rServerData = ($rServers[$rRow['server_id']] ?? null);
+
+                            if (!$rServerData || CoreUtilities::isHostOffline($rServerData)) {
                                 $rServerName .= " &nbsp; <button title=\"Server Offline!<br/>Uptime cannot be confirmed.\" type='button' class='tooltip btn btn-danger btn-xs waves-effect waves-light'><i class='mdi mdi-alert'></i></button>";
                             }
                         } else {
@@ -1754,8 +1755,9 @@ if ($rType == 'radios') {
                             } else {
                                 $rServerName .= " &nbsp; <button title=\"View All Servers\" onClick=\"viewSources('" . str_replace("'", "\\'", $rRow['stream_display_name']) . "', " . intval($rRow['id']) . ");\" type='button' class='tooltip-left btn btn-info btn-xs waves-effect waves-light'>+ " . ($rServerCount[$rRow['id']] - 1) . '</button>';
                             }
-                            if ($rServers[$rRow['server_id']]['last_status'] == 1) {
-                            } else {
+                            $rServerData = ($rServers[$rRow['server_id']] ?? null);
+
+                            if (!$rServerData || CoreUtilities::isHostOffline($rServerData)) {
                                 $rServerName .= " &nbsp; <button title=\"Server Offline!<br/>Uptime cannot be confirmed.\" type='button' class='tooltip btn btn-danger btn-xs waves-effect waves-light'><i class='mdi mdi-alert'></i></button>";
                             }
                         } else {
@@ -2191,8 +2193,9 @@ if ($rType == 'movies') {
                             } else {
                                 $rServerName .= " &nbsp; <button title=\"View All Servers\" onClick=\"viewSources('" . str_replace("'", "\\'", $rRow['stream_display_name']) . "', " . intval($rRow['id']) . ");\" type='button' class='tooltip-left btn btn-info btn-xs waves-effect waves-light'>+ " . ($rServerCount[$rRow['id']] - 1) . '</button>';
                             }
-                            if ($rServers[$rRow['server_id']]['last_status'] == 1) {
-                            } else {
+                            $rServerData = ($rServers[$rRow['server_id']] ?? null);
+
+                            if (!$rServerData || CoreUtilities::isHostOffline($rServerData)) {
                                 $rServerName .= " &nbsp; <button title=\"Server Offline!<br/>Uptime cannot be confirmed.\" type='button' class='tooltip btn btn-danger btn-xs waves-effect waves-light'><i class='mdi mdi-alert'></i></button>";
                             }
                         } else {
@@ -5070,8 +5073,9 @@ if ($rType == 'episodes') {
                             } else {
                                 $rServerName .= " &nbsp; <button title=\"View All Servers\" onClick=\"viewSources('" . str_replace("'", "\\'", $rRow['stream_display_name']) . "', " . intval($rRow['id']) . ");\" type='button' class='tooltip-left btn btn-info btn-xs waves-effect waves-light'>+ " . ($rServerCount[$rRow['id']] - 1) . '</button>';
                             }
-                            if ($rServers[$rRow['server_id']]['last_status'] == 1) {
-                            } else {
+                            $rServerData = ($rServers[$rRow['server_id']] ?? null);
+
+                            if (!$rServerData || CoreUtilities::isHostOffline($rServerData)) {
                                 $rServerName .= " &nbsp; <button title=\"Server Offline!<br/>Uptime cannot be confirmed.\" type='button' class='tooltip btn btn-danger btn-xs waves-effect waves-light'><i class='mdi mdi-alert'></i></button>";
                             }
                         } else {

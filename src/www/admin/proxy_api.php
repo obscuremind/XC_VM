@@ -5,23 +5,38 @@ require '../init.php';
 $rSignals = array();
 
 if (CoreUtilities::isProxy($_SERVER['REMOTE_ADDR'])) {
-	$db = new Database($_INFO['username'], $_INFO['password'], $_INFO['database'], $_INFO['hostname'], $_INFO['port']);
-	CoreUtilities::$db = &$db;
-	$rServerID = intval($_POST['server_id']);
-	$rStats = $_POST['stats'];
+        $db = new Database($_INFO['username'], $_INFO['password'], $_INFO['database'], $_INFO['hostname'], $_INFO['port']);
+        CoreUtilities::$db = &$db;
+        $rServerID = intval($_POST['server_id']);
+        $rStats = $_POST['stats'];
+        $rServers = CoreUtilities::$rServers;
+
+        if (!isset($rServers[$rServerID]) || CoreUtilities::isHostOffline($rServers[$rServerID])) {
+                exit();
+        }
+
+        $rServerInfo = $rServers[$rServerID];
 	$db->query('SELECT `bytes_sent_total`, `bytes_received_total`, `time` FROM `servers_stats` WHERE `server_id` = ? ORDER BY `id` DESC LIMIT 1;', $rServerID);
 
-	if ($db->num_rows() != 1) {
-	} else {
-		$rRow = $db->get_row();
-		$rTimeSince = time() - $rRow['time'];
-		$rStats['bytes_sent'] = ($rStats['bytes_sent_total'] - $rRow['bytes_sent_total']) / $rTimeSince;
-		$rStats['bytes_received'] = ($rStats['bytes_received_total'] - $rRow['bytes_received_total']) / $rTimeSince;
-	}
+        if ($db->num_rows() != 1) {
+        } else {
+                $rRow = $db->get_row();
+                $rTimeSince = time() - intval($rRow['time']);
+
+                if (0 < $rTimeSince) {
+                        $rDeltaSent = max(0, $rStats['bytes_sent_total'] - $rRow['bytes_sent_total']);
+                        $rDeltaReceived = max(0, $rStats['bytes_received_total'] - $rRow['bytes_received_total']);
+                        $rStats['bytes_sent'] = $rDeltaSent / $rTimeSince;
+                        $rStats['bytes_received'] = $rDeltaReceived / $rTimeSince;
+                } else {
+                        $rStats['bytes_sent'] = 0;
+                        $rStats['bytes_received'] = 0;
+                }
+        }
 
 	$rAddresses = $_POST['addresses'];
-	$rHardware = array('total_ram' => $rStats['total_mem'], 'total_used' => $rStats['total_mem_used'], 'cores' => $rStats['cpu_cores'], 'threads' => $rStats['cpu_cores'], 'kernel' => $rStats['kernel'], 'total_running_streams' => $rStats['total_running_streams'], 'cpu_name' => $rStats['cpu_name'], 'cpu_usage' => $rStats['cpu'], 'network_speed' => $rStats['network_speed'], 'bytes_sent' => $rStats['bytes_sent'], 'bytes_received' => $rStats['bytes_received']);
-	$rPing = (pingserver($rServers[$rServerID]['server_ip'], $rServers[$rServerID]['http_broadcast_port']) ?: 0);
+        $rHardware = array('total_ram' => $rStats['total_mem'], 'total_used' => $rStats['total_mem_used'], 'cores' => $rStats['cpu_cores'], 'threads' => $rStats['cpu_cores'], 'kernel' => $rStats['kernel'], 'total_running_streams' => $rStats['total_running_streams'], 'cpu_name' => $rStats['cpu_name'], 'cpu_usage' => $rStats['cpu'], 'network_speed' => $rStats['network_speed'], 'bytes_sent' => $rStats['bytes_sent'], 'bytes_received' => $rStats['bytes_received']);
+        $rPing = (pingserver($rServerInfo['server_ip'], $rServerInfo['http_broadcast_port']) ?: 0);
 
 	if ($rPing >= 0) {
 	} else {
@@ -29,18 +44,19 @@ if (CoreUtilities::isProxy($_SERVER['REMOTE_ADDR'])) {
 	}
 
 	if (CoreUtilities::$rSettings['redis_handler']) {
-		$rConnections = $rServers[$rServerID]['connections'];
-		$rUsers = $rServers[$rServerID]['users'];
-		$rAllUsers = 0;
+                $rConnections = $rServerInfo['connections'];
+                $rUsers = $rServerInfo['users'];
+                $rAllUsers = 0;
 
-		foreach (array_keys($rServers) as $rServerID) {
-			if (!$rServers[$rServerID]['server_online']) {
-			} else {
-				$rAllUsers += $rServers[$rServerID]['users'];
-			}
-		}
-	} else {
-		$db->query('SELECT COUNT(*) AS `count` FROM `lines_live` WHERE `proxy_id` = ? AND `hls_end` = 0;', $rServerID);
+                foreach ($rServers as $rOtherServerInfo) {
+                        if (CoreUtilities::isHostOffline($rOtherServerInfo)) {
+                                continue;
+                        }
+
+                        $rAllUsers += $rOtherServerInfo['users'];
+                }
+        } else {
+                $db->query('SELECT COUNT(*) AS `count` FROM `lines_live` WHERE `proxy_id` = ? AND `hls_end` = 0;', $rServerID);
 		$rConnections = intval($db->get_row()['count']);
 		$db->query('SELECT `activity_id` FROM `lines_live` WHERE `proxy_id` = ? AND `hls_end` = 0 GROUP BY `user_id`;', $rServerID);
 		$rUsers = intval($db->num_rows());

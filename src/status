@@ -1702,15 +1702,18 @@ if (posix_getpwuid(posix_geteuid())['name'] == 'root') {
 			echo 'Servers' . "\n" . '------------------------------' . "\n";
 			$rOffline = 0;
 
-			foreach ($rServers as $rServerID => $rServer) {
-				if ($rServerID != SERVER_ID) {
-					if (!(!$rServer['server_online'] && $rServer['enabled'] && $rServer['status'] != 3 && $rServer['status'] != 5)) {
-					} else {
-						echo 'Server #' . $rServerID . ' - ' . $rServer['server_ip'] . ' - Down since: ' . (($rServer['last_check_ago'] ? date('Y-m-d H:i:s', $rServer['last_check_ago']) : 'Always')) . "\n";
-						$rOffline++;
-					}
-				}
-			}
+                        foreach ($rServers as $rServerID => $rServer) {
+                                if ($rServerID == SERVER_ID) {
+                                        continue;
+                                }
+
+                                if (!CoreUtilities::isHostOffline($rServer)) {
+                                        continue;
+                                }
+
+                                echo 'Server #' . $rServerID . ' - ' . $rServer['server_ip'] . ' - Down since: ' . (($rServer['last_check_ago'] ? date('Y-m-d H:i:s', $rServer['last_check_ago']) : 'Always')) . "\n";
+                                $rOffline++;
+                        }
 
 			if ($rOffline == 0) {
 				echo 'All servers are Online and reporting back to XC_VM!' . "\n\n";
@@ -1765,9 +1768,7 @@ function isrunning() {
 function ABc6134F1458b898() {
 	CoreUtilities::$db->query('SELECT * FROM `servers`');
 	$rServers = array();
-	$rOnlineStatus = array(1);
-
-	foreach (CoreUtilities::$db->get_rows() as $rRow) {
+        foreach (CoreUtilities::$db->get_rows() as $rRow) {
 		if (empty($rRow['domain_name'])) {
 			$rURL = escapeshellcmd($rRow['server_ip']);
 		} else {
@@ -1783,13 +1784,7 @@ function ABc6134F1458b898() {
 		$rPort = ($rProtocol == 'http' ? intval($rRow['http_broadcast_port']) : intval($rRow['https_broadcast_port']));
 		$rRow['site_url'] = $rProtocol . '://' . $rURL . ':' . $rPort . '/';
 
-		if ($rRow['server_type'] == 1) {
-			$rLastCheckTime = 180;
-		} else {
-			$rLastCheckTime = 90;
-		}
-
-		$rRow['server_online'] = $rRow['enabled'] && in_array($rRow['status'], $rOnlineStatus) && time() - $rRow['last_check_ago'] <= $rLastCheckTime || SERVER_ID == $rRow['id'];
+                $rRow['server_online'] = !CoreUtilities::isHostOffline($rRow);
 		$rServers[intval($rRow['id'])] = $rRow;
 	}
 
