@@ -187,7 +187,7 @@
                                             <i class="mdi mdi-wifi-strength-off noti-icon"></i>
                                         </a>
                                     </li>
-                                <?php elseif ($allServersHealthy && hasPermissions('adv', 'servers')): ?>
+                                <?php elseif ($rProxyServerError && hasPermissions('adv', 'servers')): ?>
                                     <li class="notification-list">
                                         <a href="proxies" class="nav-link right-bar-toggle waves-effect <?php echo $rUserInfo['theme'] == 1 ? 'text-white' : 'text-warning'; ?>">
                                             <i class="mdi mdi-wifi-strength-off noti-icon"></i>

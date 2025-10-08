@@ -391,8 +391,9 @@ include 'header.php';
 
 				<?php if (!isset(CoreUtilities::$rRequest['server_id'])): ?>
 					<?php $i = 0; ?>
-					<?php foreach ($rOrderedServers as $rServer): ?>
-						<?php if ($rServer['enabled'] && $rServer['server_online']): ?>
+                                        <?php foreach ($rOrderedServers as $rServer): ?>
+                                                <?php $rIsOffline = CoreUtilities::isHostOffline($rServer); ?>
+                                                <?php if ($rServer['enabled'] && !$rIsOffline): ?>
 							<?php
 							$i++;
 							if ($i == 5) {
@@ -595,8 +596,9 @@ include 'header.php';
 					<?php
 					$i = 0;
 
-					foreach ($rOrderedServers as $rServer) {
-						if (!$rServer['enabled'] || $rServer['server_online']) {
+                                        foreach ($rOrderedServers as $rServer) {
+                                                $rIsOffline = CoreUtilities::isHostOffline($rServer);
+                                                if (!$rServer['enabled'] || !$rIsOffline) {
 						} else {
 							$i++;
 

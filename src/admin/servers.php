@@ -51,8 +51,9 @@ include 'header.php';
                             <tbody>
                                 <?php foreach (CoreUtilities::$rServers as $rServer) {
                                     if ($rServer['server_type'] == 0) {
+                                        $rIsOffline = CoreUtilities::isHostOffline($rServer);
                                         $rWatchDog = json_decode($rServer['watchdog_data'], true) ?: array('total_mem_used_percent' => '0', 'cpu' => '0');
-                                        if (!CoreUtilities::$rServers[$rServer['id']]['server_online']) {
+                                        if ($rIsOffline) {
                                             $rWatchDog['cpu'] = 0;
                                             $rWatchDog['total_mem_used_percent'] = 0;
                                         }
@@ -66,10 +67,11 @@ include 'header.php';
                                             </td>
                                             <td class="text-center">
                                                 <?php
+                                                $rIsOnline = !$rIsOffline;
                                                 if (!$rServer['enabled']) {
                                                     echo '<i class="text-secondary fas fa-square tooltip" title="Disabled"></i>';
                                                 } else {
-                                                    if ($rServer['server_online']) {
+                                                    if ($rIsOnline) {
                                                         echo '<i class="text-success fas fa-square tooltip" title="Online"></i>';
                                                     } else {
                                                         echo '<i class="text-danger fas fa-square tooltip" title="Offline"></i>';
@@ -138,7 +140,7 @@ include 'header.php';
                                             </td>
                                             <td class="text-center">
                                                 <button type="button"
-                                                    class="btn btn-light btn-xs waves-effect waves-light"><?php echo number_format(($rServer['server_online'] ? $rServer['ping'] : 0), 0); ?>
+                                                    class="btn btn-light btn-xs waves-effect waves-light"><?php echo number_format(($rIsOnline ? $rServer['ping'] : 0), 0); ?>
                                                     ms</button>
                                             </td>
                                             <td class="text-center">

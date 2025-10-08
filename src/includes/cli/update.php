@@ -108,7 +108,7 @@ function loadcli() {
             // Notify other load balancers to update
             if (CoreUtilities::$rServers[SERVER_ID]['is_main'] && CoreUtilities::$rSettings['auto_update_lbs']) {
                 foreach (CoreUtilities::$rServers as $rServer) {
-                    if (($rServer['enabled'] && $rServer['status'] == 1 && time() - $rServer['last_check_ago'] <= 180) || !$rServer['is_main']) {
+                    if (!CoreUtilities::isHostOffline($rServer) || !$rServer['is_main']) {
                         $db->query('INSERT INTO `signals`(`server_id`, `time`, `custom_data`) VALUES(?, ?, ?);', $rServer['id'], time(), json_encode(array('action' => 'update')));
                     }
                 }

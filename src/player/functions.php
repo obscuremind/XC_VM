@@ -676,10 +676,15 @@ class CoreUtilities {
 		$rReturn = array();
 
 		foreach (self::$rServers as $rProxyID => $rServerInfo) {
-			if (!($rServerInfo['server_type'] == 1 && in_array($rServerID, $rServerInfo['parent_id']) && ($rServerInfo['server_online'] || !$rOnline))) {
-			} else {
-				$rReturn[$rProxyID] = $rServerInfo;
+			if (!($rServerInfo['server_type'] == 1 && in_array($rServerID, $rServerInfo['parent_id']))) {
+				continue;
 			}
+
+			if ($rOnline && CoreUtilities::isHostOffline($rServerInfo)) {
+				continue;
+			}
+
+			$rReturn[$rProxyID] = $rServerInfo;
 		}
 
 		return $rReturn;
@@ -693,8 +698,7 @@ class CoreUtilities {
 			if (self::$rServers[SERVER_ID]['enable_proxy']) {
 				$rProxyID = self::getProxyFor(SERVER_ID);
 
-				if (!$rProxyID) {
-				} else {
+				if ($rProxyID && isset(self::$rServers[$rProxyID]) && !CoreUtilities::isHostOffline(self::$rServers[$rProxyID])) {
 					$rDomainName = self::$rServers[$rProxyID][$rKey];
 				}
 			} else {
@@ -706,8 +710,7 @@ class CoreUtilities {
 			if ($serverIPAddress == self::$rServers[SERVER_ID]['server_ip'] && self::$rServers[SERVER_ID]['enable_proxy']) {
 				$rProxyID = self::getProxyFor(SERVER_ID);
 
-				if (!$rProxyID) {
-				} else {
+				if ($rProxyID && isset(self::$rServers[$rProxyID]) && !CoreUtilities::isHostOffline(self::$rServers[$rProxyID])) {
 					$rDomainName = self::$rServers[$rProxyID][$rKey];
 				}
 			} else {

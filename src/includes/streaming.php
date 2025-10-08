@@ -426,33 +426,52 @@ class CoreUtilities {
 		if ($rStream) {
 			$rStream['info']['bouquets'] = $rStream['bouquets'];
 			$rAvailableServers = array();
-			if ($rType == 'archive') {
-				if (!(0 < $rStream['info']['tv_archive_duration'] && 0 < $rStream['info']['tv_archive_server_id'] && array_key_exists($rStream['info']['tv_archive_server_id'], self::$rServers))) {
-				} else {
-					$rAvailableServers = array($rStream['info']['tv_archive_server_id']);
-				}
-			} else {
-				if (!($rStream['info']['direct_source'] == 1 && $rStream['info']['direct_proxy'] == 0)) {
-					foreach (self::$rServers as $rServerID => $rServerInfo) {
-						if (!(!array_key_exists($rServerID, $rStream['servers']) || !$rServerInfo['server_online'] || $rServerInfo['server_type'] != 0)) {
-							if (!isset($rStream['servers'][$rServerID])) {
-							} else {
-								if ($rType == 'movie') {
-									if (!((!empty($rStream['servers'][$rServerID]['pid']) && $rStream['servers'][$rServerID]['to_analyze'] == 0 && $rStream['servers'][$rServerID]['stream_status'] == 0 || $rStream['info']['direct_source'] == 1 && $rStream['info']['direct_proxy'] == 1) && ($rStream['info']['target_container'] == $rExtension || ($rExtension = 'srt')) && $rServerInfo['timeshift_only'] == 0)) {
-									} else {
-										$rAvailableServers[] = $rServerID;
-									}
-								} else {
-									if (!(($rStream['servers'][$rServerID]['on_demand'] == 1 && $rStream['servers'][$rServerID]['stream_status'] != 1 || 0 < $rStream['servers'][$rServerID]['pid'] && $rStream['servers'][$rServerID]['stream_status'] == 0) && $rStream['servers'][$rServerID]['to_analyze'] == 0 && (int) $rStream['servers'][$rServerID]['delay_available_at'] <= time() && $rServerInfo['timeshift_only'] == 0 || $rStream['info']['direct_source'] == 1 && $rStream['info']['direct_proxy'] == 1)) {
-									} else {
-										$rAvailableServers[] = $rServerID;
-									}
-								}
-							}
-						}
-					}
-				} else {
-					header('Location: ' . str_replace(' ', '%20', json_decode($rStream['info']['stream_source'], true)[0]));
+                        if ($rType == 'archive') {
+                                if (0 < $rStream['info']['tv_archive_duration'] &&
+                                        0 < $rStream['info']['tv_archive_server_id'] &&
+                                        array_key_exists($rStream['info']['tv_archive_server_id'], self::$rServers) &&
+                                        !CoreUtilities::isHostOffline(self::$rServers[$rStream['info']['tv_archive_server_id']])) {
+                                        $rAvailableServers = array($rStream['info']['tv_archive_server_id']);
+                                }
+                        } else {
+                                if (!($rStream['info']['direct_source'] == 1 && $rStream['info']['direct_proxy'] == 0)) {
+                                        foreach (self::$rServers as $rServerID => $rServerInfo) {
+                                                if (!array_key_exists($rServerID, $rStream['servers'])) {
+                                                        continue;
+                                                }
+
+                                                if (CoreUtilities::isHostOffline($rServerInfo)) {
+                                                        continue;
+                                                }
+
+                                                if ($rServerInfo['server_type'] != 0) {
+                                                        continue;
+                                                }
+
+                                                if ($rType == 'movie') {
+                                                        if ((!empty($rStream['servers'][$rServerID]['pid']) &&
+                                                                $rStream['servers'][$rServerID]['to_analyze'] == 0 &&
+                                                                $rStream['servers'][$rServerID]['stream_status'] == 0 ||
+                                                                $rStream['info']['direct_source'] == 1 && $rStream['info']['direct_proxy'] == 1) &&
+                                                                ($rStream['info']['target_container'] == $rExtension || ($rExtension = 'srt')) &&
+                                                                $rServerInfo['timeshift_only'] == 0) {
+                                                                $rAvailableServers[] = $rServerID;
+                                                        }
+                                                } else {
+                                                        if ((($rStream['servers'][$rServerID]['on_demand'] == 1 &&
+                                                                $rStream['servers'][$rServerID]['stream_status'] != 1 ||
+                                                                0 < $rStream['servers'][$rServerID]['pid'] &&
+                                                                $rStream['servers'][$rServerID]['stream_status'] == 0) &&
+                                                                $rStream['servers'][$rServerID]['to_analyze'] == 0 &&
+                                                                (int) $rStream['servers'][$rServerID]['delay_available_at'] <= time() &&
+                                                                $rServerInfo['timeshift_only'] == 0 ||
+                                                                $rStream['info']['direct_source'] == 1 && $rStream['info']['direct_proxy'] == 1)) {
+                                                                $rAvailableServers[] = $rServerID;
+                                                        }
+                                                }
+                                        }
+                                } else {
+                                        header('Location: ' . str_replace(' ', '%20', json_decode($rStream['info']['stream_source'], true)[0]));
 					exit();
 				}
 			}
@@ -640,11 +659,15 @@ class CoreUtilities {
 	}
 	public static function F4221e28760B623E($rUserInfo, $rUserIP, $rCountryCode, $rUserISP = '') {
 		$rAvailableServers = array();
-		foreach (self::$rServers as $rServerID => $rServerInfo) {
-			if ($rServerInfo['server_online'] && $rServerInfo['server_type'] == 0) {
-				$rAvailableServers[] = $rServerID;
-			}
-		}
+                foreach (self::$rServers as $rServerID => $rServerInfo) {
+                        if (CoreUtilities::isHostOffline($rServerInfo)) {
+                                continue;
+                        }
+
+                        if ($rServerInfo['server_type'] == 0) {
+                                $rAvailableServers[] = $rServerID;
+                        }
+                }
 		if (!empty($rAvailableServers)) {
 			shuffle($rAvailableServers);
 			$rServerCapacity = self::getCapacity();
@@ -1856,14 +1879,23 @@ class CoreUtilities {
 	}
 	public static function getProxies($rServerID, $rOnline = true) {
 		$rReturn = array();
-		foreach (self::$rServers as $rProxyID => $rServerInfo) {
-			if (!($rServerInfo['server_type'] == 1 && in_array($rServerID, $rServerInfo['parent_id']) && ($rServerInfo['server_online'] || !$rOnline))) {
-			} else {
-				$rReturn[$rProxyID] = $rServerInfo;
-			}
-		}
-		return $rReturn;
-	}
+                foreach (self::$rServers as $rProxyID => $rServerInfo) {
+                        if ($rServerInfo['server_type'] != 1) {
+                                continue;
+                        }
+
+                        if (!in_array($rServerID, $rServerInfo['parent_id'])) {
+                                continue;
+                        }
+
+                        if ($rOnline && CoreUtilities::isHostOffline($rServerInfo)) {
+                                continue;
+                        }
+
+                        $rReturn[$rProxyID] = $rServerInfo;
+                }
+                return $rReturn;
+        }
 	public static function getStreamingURL($rServerID = null, $rOriginatorID = null, $rForceHTTP = false) {
 		if (isset($rServerID)) {
 		} else {

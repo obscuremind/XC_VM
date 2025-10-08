@@ -46,12 +46,12 @@ $serverId = (!empty($channelInfo['redirect_id']) && $channelInfo['redirect_id'] 
         ? $channelInfo['redirect_id']
         : SERVER_ID;
 
-$serverStatus = CoreUtilities::$rServers[$serverId]['last_status'] ?? null;
-if (empty($channelInfo['monitor_pid'])
+if (!isset(CoreUtilities::$rServers[$serverId])
+        || CoreUtilities::isHostOffline(CoreUtilities::$rServers[$serverId])
+        || empty($channelInfo['monitor_pid'])
         || empty($channelInfo['pid'])
         || $channelInfo['monitor_pid'] <= 0
-        || $channelInfo['pid'] <= 0
-        || $serverStatus != 1) {
+        || $channelInfo['pid'] <= 0) {
         generate404();
 }
 

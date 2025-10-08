@@ -23,7 +23,7 @@ if (posix_getpwuid(posix_geteuid())['name'] == 'xc_vm') {
                 }
             }
 
-            if (!$rLastCheck && $rInterval < time() - $rLastCheck) {
+            if (!$rLastCheck || $rInterval < time() - $rLastCheck) {
                 if (CoreUtilities::isRunning()) {
                     if (md5_file(__FILE__) == $rMD5) {
                         CoreUtilities::$rServers = CoreUtilities::getServers(true);
@@ -88,21 +88,32 @@ if (posix_getpwuid(posix_geteuid())['name'] == 'xc_vm') {
                     if (CoreUtilities::$rSettings['redis_handler']) {
                         $rMulti = CoreUtilities::$redis->multi();
                         foreach (array_keys(CoreUtilities::$rServers) as $rServerID) {
-                            if (!CoreUtilities::$rServers[$rServerID]['server_online']) {
-                            } else {
-                                $rMulti->zCard('SERVER#' . $rServerID);
-                                $rMulti->zRangeByScore('SERVER_LINES#' . $rServerID, '-inf', '+inf', array('withscores' => true));
+                            if (!isset(CoreUtilities::$rServers[$rServerID])) {
+                                continue;
                             }
+
+                            if (CoreUtilities::isHostOffline(CoreUtilities::$rServers[$rServerID])) {
+                                continue;
+                            }
+
+                            $rMulti->zCard('SERVER#' . $rServerID);
+                            $rMulti->zRangeByScore('SERVER_LINES#' . $rServerID, '-inf', '+inf', array('withscores' => true));
                         }
                         $rResults = $rMulti->exec();
                         $rTotalUsers = array();
                         $i = 0;
                         foreach (array_keys(CoreUtilities::$rServers) as $rServerID) {
-                            if (CoreUtilities::$rServers[$rServerID]['server_online']) {
-                                $db->query('UPDATE `servers` SET `connections` = ?, `users` = ? WHERE `id` = ?;', $rResults[$i * 2], count(array_unique(array_values($rResults[$i * 2 + 1]))), $rServerID);
-                                $rTotalUsers = array_merge(array_values($rResults[$i * 2 + 1]), $rTotalUsers);
-                                $i++;
+                            if (!isset(CoreUtilities::$rServers[$rServerID])) {
+                                continue;
                             }
+
+                            if (CoreUtilities::isHostOffline(CoreUtilities::$rServers[$rServerID])) {
+                                continue;
+                            }
+
+                            $db->query('UPDATE `servers` SET `connections` = ?, `users` = ? WHERE `id` = ?;', $rResults[$i * 2], count(array_unique(array_values($rResults[$i * 2 + 1]))), $rServerID);
+                            $rTotalUsers = array_merge(array_values($rResults[$i * 2 + 1]), $rTotalUsers);
+                            $i++;
                         }
                         $db->query('UPDATE `settings` SET `total_users` = ?;', count(array_unique($rTotalUsers)));
                     } else {

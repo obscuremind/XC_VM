@@ -5,6 +5,9 @@ if (!defined('MAIN_HOME')) {
 
 require_once MAIN_HOME . 'includes/admin.php';
 
+$rServerError = false;
+$rProxyServerError = false;
+
 if ($rMobile) {
 	$rSettings['js_navigate'] = 0;
 }
@@ -46,20 +49,8 @@ if (isset($_SESSION['hash'])) {
 		$_SESSION['ip'] = $rIP;
 	}
 
-	$rServerError = false;
-
-	foreach ($rServers as $rServer) {
-		if (!$rServer['server_online'] && $rServer['enabled'] && $rServer['status'] != 3 && $rServer['status'] != 5) {
-			$rServerError = true;
-		}
-	}
-	$allServersHealthy = false;
-
-	foreach ($rProxyServers as $rServer) {
-		if (!$rServer['server_online'] && $rServer['enabled'] && $rServer['status'] != 3 && $rServer['status'] != 5) {
-			$allServersHealthy = true;
-		}
-	}
+        $rServerError = CoreUtilities::hasOfflineHosts(isset($rServers) ? $rServers : array());
+        $rProxyServerError = CoreUtilities::hasOfflineHosts(isset($rProxyServers) ? $rProxyServers : array());
 	$updateRequired = false;
 
 	if (!version_compare($rServers[SERVER_ID]['xc_vm_version'], CoreUtilities::$rSettings['update_version'], '>=')) {

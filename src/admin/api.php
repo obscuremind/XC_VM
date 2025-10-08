@@ -1428,17 +1428,24 @@ if (isset($_SESSION['hash'])) {
 
 			if (0 >= $db->num_rows()) {
 			} else {
-				foreach ($db->get_rows() as $rRow) {
-					if (!$rServers[$rRow['server_id']]['server_online']) {
-					} else {
-						$rNearest = getNearest($rStatsRange, intval($rRow['time']));
+                                foreach ($db->get_rows() as $rRow) {
+                                        $rServerID = intval($rRow['server_id']);
 
-						if (isset($rStatsRange[$rNearest][intval($rRow['server_id'])])) {
-						} else {
-							$rServerStats[$rNearest][intval($rRow['server_id'])] = $rRow;
-						}
-					}
-				}
+                                        if (!isset($rServers[$rServerID])) {
+                                                continue;
+                                        }
+
+                                        if (CoreUtilities::isHostOffline($rServers[$rServerID])) {
+                                                continue;
+                                        }
+
+                                        $rNearest = getNearest($rStatsRange, intval($rRow['time']));
+
+                                        if (isset($rStatsRange[$rNearest][$rServerID])) {
+                                        } else {
+                                                $rServerStats[$rNearest][$rServerID] = $rRow;
+                                        }
+                                }
 			}
 
 			$rStats = array('cpu' => array(), 'memory' => array(), 'users' => array(), 'io' => array(), 'input' => array(), 'output' => array(), 'dates' => array(null, null));
@@ -1550,7 +1557,7 @@ if (isset($_SESSION['hash'])) {
 						$rReturn['online_users'] = $rServers[$rServerID]['users'];
 
 						foreach (array_keys($rServers) as $rSID) {
-							if (!$rServers[$rSID]['server_online']) {
+							if (CoreUtilities::isHostOffline($rServers[$rSID])) {
 							} else {
 								$rReturn['total_connections'] += $rServers[$rSID]['connections'];
 							}
@@ -1652,9 +1659,9 @@ if (isset($_SESSION['hash'])) {
 					foreach ($db->get_rows() as $rRow) {
 						$rOnlineStreams[intval($rRow['server_id'])] = intval($rRow['count']);
 					}
-
 					foreach (array_keys($rServers) as $rServerID) {
-						if ($rServers[$rServerID]['server_online']) {
+						if (CoreUtilities::isHostOffline($rServers[$rServerID])) {
+						} else {
 							$rArray = array();
 
 							if (CoreUtilities::$rSettings['redis_handler']) {
@@ -1756,25 +1763,26 @@ if (isset($_SESSION['hash'])) {
 					$rOfflineCount[intval($rRow['server_id'])] = intval($rRow['count']);
 				}
 
-				foreach (array_keys($rServers) as $rServerID) {
-					if (!$rServers[$rServerID]['server_online']) {
-					} else {
-						if (!CoreUtilities::$rSettings['redis_handler']) {
-						} else {
-							$rReturn['total_connections'] += $rServers[$rServerID]['connections'];
-						}
+                                foreach ($rServers as $rServerID => $rServerInfo) {
+                                        if (CoreUtilities::isHostOffline($rServerInfo)) {
+                                                continue;
+                                        }
 
-						$rReturn['total_running_streams'] += ($rOnlineCount[$rServerID] ?: 0);
-						$rReturn['offline_streams'] += ($rOfflineCount[$rServerID] ?: 0);
-						$rWatchDog = json_decode($rServers[$rServerID]['watchdog_data'], true);
+                                        if (CoreUtilities::$rSettings['redis_handler']) {
+                                                $rReturn['total_connections'] += $rServerInfo['connections'];
+                                        }
 
-						if (!is_array($rWatchDog)) {
-						} else {
-							$rReturn['bytes_received'] += intval($rWatchDog['bytes_received']);
-							$rReturn['bytes_sent'] += intval($rWatchDog['bytes_sent']);
-						}
-					}
-				}
+                                        $rReturn['total_running_streams'] += ($rOnlineCount[$rServerID] ?: 0);
+                                        $rReturn['offline_streams'] += ($rOfflineCount[$rServerID] ?: 0);
+                                        $rWatchDog = json_decode($rServerInfo['watchdog_data'], true);
+
+                                        if (!is_array($rWatchDog)) {
+                                                continue;
+                                        }
+
+                                        $rReturn['bytes_received'] += intval($rWatchDog['bytes_received']);
+                                        $rReturn['bytes_sent'] += intval($rWatchDog['bytes_sent']);
+                                }
 				echo json_encode($rReturn, JSON_PARTIAL_OUTPUT_ON_ERROR);
 
 				exit();
@@ -2285,18 +2293,13 @@ if (isset($_SESSION['hash'])) {
 				$rData = json_decode(CoreUtilities::$rRequest['data'], true);
 				$rActiveServers = array();
 
-				foreach ($rServers as $rServer) {
-					if ((360 < time() - $rServer['last_check_ago'] || $rServer['status'] == 2) && $rServer['is_main'] == 0 && $rServer['status'] != 3) {
-						$rServerError = true;
-					} else {
-						$rServerError = false;
-					}
+                                foreach ($rServers as $rServer) {
+                                        $rServerError = CoreUtilities::isHostOffline($rServer);
 
-					if ($rServer['status'] != 1 || $rServerError) {
-					} else {
-						$rActiveServers[] = $rServer['id'];
-					}
-				}
+                                        if ($rServer['status'] == 1 && !$rServerError) {
+                                                $rActiveServers[] = $rServer['id'];
+                                        }
+                                }
 
 				if (!(0 < $rData['id'] && 0 < $rData['font_size'] && 0 < strlen($rData['font_color']) && 0 < strlen($rData['xy_offset']) && (0 < strlen($rData['message']) || $rData['type'] < 3))) {
 				} else {
@@ -2376,12 +2379,13 @@ if (isset($_SESSION['hash'])) {
 		}
 		if (CoreUtilities::$rRequest['action'] == 'restart_all_services') {
 			if (hasPermissions('adv', 'servers')) {
-				foreach ($rServers as $rServer) {
-					if (!$rServer['server_online']) {
-					} else {
-						$db->query("INSERT INTO `signals`(`server_id`, `custom_data`, `time`) VALUES(?, '{\"action\": \"restart_services\"}', ?);", $rServer['id'], time());
-					}
-				}
+                                foreach ($rServers as $rServer) {
+                                        if (CoreUtilities::isHostOffline($rServer)) {
+                                                continue;
+                                        }
+
+                                        $db->query("INSERT INTO `signals`(`server_id`, `custom_data`, `time`) VALUES(?, '{\"action\": \"restart_services\"}', ?);", $rServer['id'], time());
+                                }
 				echo json_encode(array('result' => true));
 
 				exit();
@@ -2460,10 +2464,18 @@ if (isset($_SESSION['hash'])) {
 				ini_set('default_socket_timeout', intval($rTimeout));
 				$rServerID = SERVER_ID;
 
-				if (empty(CoreUtilities::$rRequest['server']) || !$rServers[intval(CoreUtilities::$rRequest['server'])]['server_online']) {
-				} else {
-					$rServerID = intval(CoreUtilities::$rRequest['server']);
-				}
+                                if (empty(CoreUtilities::$rRequest['server'])) {
+                                } else {
+                                        $rRequestedServerID = intval(CoreUtilities::$rRequest['server']);
+
+                                        if (!isset($rServers[$rRequestedServerID])) {
+                                        } else {
+                                                if (CoreUtilities::isHostOffline($rServers[$rRequestedServerID])) {
+                                                } else {
+                                                        $rServerID = $rRequestedServerID;
+                                                }
+                                        }
+                                }
 
 				$rStreamInfoText = "<table style='width: 380px;' class='table-data' align='center'><tbody><tr><td colspan='4'>Stream probe failed!</td></tr></tbody></table>";
 				$rStreamInfo = null;
@@ -3104,11 +3116,13 @@ if (isset($_SESSION['hash'])) {
 		}
 		if (CoreUtilities::$rRequest['action'] == 'update_all_servers') {
 			if (hasPermissions('adv', 'servers')) {
-				foreach ($rServers as $rServer) {
-					if ($rServer['server_online']) {
-						$db->query('INSERT INTO `signals`(`server_id`, `time`, `custom_data`) VALUES(?, ?, ?);', $rServer['id'], time(), json_encode(array('action' => 'update')));
-					}
-				}
+                                foreach ($rServers as $rServer) {
+                                        if (CoreUtilities::isHostOffline($rServer)) {
+                                                continue;
+                                        }
+
+                                        $db->query('INSERT INTO `signals`(`server_id`, `time`, `custom_data`) VALUES(?, ?, ?);', $rServer['id'], time(), json_encode(array('action' => 'update')));
+                                }
 				echo json_encode(array('result' => true));
 
 				exit();
@@ -3120,12 +3134,13 @@ if (isset($_SESSION['hash'])) {
 		}
 		if (CoreUtilities::$rRequest['action'] == 'update_all_binaries') {
 			if (hasPermissions('adv', 'servers')) {
-				foreach ($rServers as $rServer) {
-					if (!$rServer['server_online']) {
-					} else {
-						$db->query('INSERT INTO `signals`(`server_id`, `time`, `custom_data`) VALUES(?, ?, ?);', $rServer['id'], time(), json_encode(array('action' => 'update_binaries')));
-					}
-				}
+                                foreach ($rServers as $rServer) {
+                                        if (CoreUtilities::isHostOffline($rServer)) {
+                                                continue;
+                                        }
+
+                                        $db->query('INSERT INTO `signals`(`server_id`, `time`, `custom_data`) VALUES(?, ?, ?);', $rServer['id'], time(), json_encode(array('action' => 'update_binaries')));
+                                }
 				echo json_encode(array('result' => true));
 
 				exit();
@@ -3760,11 +3775,11 @@ if (isset($_SESSION['hash'])) {
 					foreach ($db->get_rows() as $rRow) {
 						$rServerCount[$rRow['stream_id']]++;
 
-						if ($rServers[$rRow['server_id']]['server_online']) {
-							$rRow['priority'] = (0 < $rRow['pid'] ? 1 : 0);
-						} else {
-							$rRow['priority'] = 0;
-						}
+                                                if (isset($rServers[$rRow['server_id']]) && !CoreUtilities::isHostOffline($rServers[$rRow['server_id']])) {
+                                                        $rRow['priority'] = (0 < $rRow['pid'] ? 1 : 0);
+                                                } else {
+                                                        $rRow['priority'] = 0;
+                                                }
 
 						$rServerItems[$rRow['stream_id']][] = $rRow;
 					}

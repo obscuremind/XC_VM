@@ -1303,18 +1303,29 @@ function deleteProfile($rID) {
 }
 
 function AsyncAPIRequest($rServerIDs, $rData) {
-	$rURLs = array();
+        $rURLs = array();
 
 
-	foreach ($rServerIDs as $rServerID) {
-		if (!CoreUtilities::$rServers[$rServerID]['server_online']) {
-		} else {
-			$rURLs[$rServerID] = array('url' => CoreUtilities::$rServers[$rServerID]['api_url'], 'postdata' => $rData);
-		}
-	}
-	CoreUtilities::getMultiCURL($rURLs);
+        foreach ($rServerIDs as $rServerID) {
+                if (!isset(CoreUtilities::$rServers[$rServerID])) {
+                        continue;
+                }
 
-	return array('result' => true);
+                $rServerInfo = CoreUtilities::$rServers[$rServerID];
+
+                if (CoreUtilities::isHostOffline($rServerInfo)) {
+                        continue;
+                }
+
+                if (!isset($rServerInfo['api_url'])) {
+                        continue;
+                }
+
+                $rURLs[$rServerID] = array('url' => $rServerInfo['api_url'], 'postdata' => $rData);
+        }
+        CoreUtilities::getMultiCURL($rURLs);
+
+        return array('result' => true);
 }
 
 function changePort($rServerID, $rType, $rPorts, $rReload = false) {
@@ -1386,22 +1397,30 @@ function APIRequest($rData, $rTimeout = 5) {
 }
 
 function systemapirequest($rServerID, $rData, $rTimeout = 5) {
-	ini_set('default_socket_timeout', $rTimeout);
-	if (CoreUtilities::$rServers[$rServerID]['server_online']) {
-		$rAPI = 'http://' . CoreUtilities::$rServers[intval($rServerID)]['server_ip'] . ':' . CoreUtilities::$rServers[intval($rServerID)]['http_broadcast_port'] . '/api';
-		$rData['password'] = CoreUtilities::$rSettings['live_streaming_pass'];
-		$rPost = http_build_query($rData);
-		$ch = curl_init();
-		curl_setopt($ch, CURLOPT_URL, $rAPI);
-		curl_setopt($ch, CURLOPT_POST, true);
-		curl_setopt($ch, CURLOPT_POSTFIELDS, $rPost);
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $rTimeout);
-		curl_setopt($ch, CURLOPT_TIMEOUT, $rTimeout);
+        ini_set('default_socket_timeout', $rTimeout);
 
-		return curl_exec($ch);
-	}
-	return null;
+        if (!isset(CoreUtilities::$rServers[$rServerID])) {
+                return null;
+        }
+
+        $rServerInfo = CoreUtilities::$rServers[$rServerID];
+
+        if (CoreUtilities::isHostOffline($rServerInfo)) {
+                return null;
+        }
+
+        $rAPI = 'http://' . $rServerInfo['server_ip'] . ':' . $rServerInfo['http_broadcast_port'] . '/api';
+        $rData['password'] = CoreUtilities::$rSettings['live_streaming_pass'];
+        $rPost = http_build_query($rData);
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $rAPI);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $rPost);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $rTimeout);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $rTimeout);
+
+        return curl_exec($ch);
 }
 
 function getWatchFolder($rID) {
@@ -2072,42 +2091,57 @@ function restoreImages() {
 	global $db;
 
 
-	foreach (array_keys(CoreUtilities::$rServers) as $rServerID) {
-		if (!CoreUtilities::$rServers[$rServerID]['server_online']) {
-		} else {
-			systemapirequest($rServerID, array('action' => 'restore_images'));
-		}
-	}
+        foreach (CoreUtilities::$rServers as $rServerID => $rServerInfo) {
+                if (CoreUtilities::isHostOffline($rServerInfo)) {
+                        continue;
+                }
 
-	return true;
+                systemapirequest($rServerID, array('action' => 'restore_images'));
+        }
+
+        return true;
 }
 
 function killWatchFolder() {
 	global $db;
 	$db->query("SELECT DISTINCT(`server_id`) AS `server_id` FROM `watch_folders` WHERE `active` = 11 AND `type` <> 'plex';");
 
-	foreach ($db->get_rows() as $rRow) {
-		if (!CoreUtilities::$rServers[$rRow['server_id']]['server_online']) {
-		} else {
-			systemapirequest($rRow['server_id'], array('action' => 'kill_watch'));
-		}
-	}
+        foreach ($db->get_rows() as $rRow) {
+                $rServerID = intval($rRow['server_id']);
 
-	return true;
+                if (!isset(CoreUtilities::$rServers[$rServerID])) {
+                        continue;
+                }
+
+                if (CoreUtilities::isHostOffline(CoreUtilities::$rServers[$rServerID])) {
+                        continue;
+                }
+
+                systemapirequest($rServerID, array('action' => 'kill_watch'));
+        }
+
+        return true;
 }
 
 function killPlexSync() {
 	global $db;
 	$db->query("SELECT DISTINCT(`server_id`) AS `server_id` FROM `watch_folders` WHERE `active` = 1 AND `type` = 'plex';");
 
-	foreach ($db->get_rows() as $rRow) {
-		if (!CoreUtilities::$rServers[$rRow['server_id']]['server_online']) {
-		} else {
-			systemapirequest($rRow['server_id'], array('action' => 'kill_plex'));
-		}
-	}
+        foreach ($db->get_rows() as $rRow) {
+                $rServerID = intval($rRow['server_id']);
 
-	return true;
+                if (!isset(CoreUtilities::$rServers[$rServerID])) {
+                        continue;
+                }
+
+                if (CoreUtilities::isHostOffline(CoreUtilities::$rServers[$rServerID])) {
+                        continue;
+                }
+
+                systemapirequest($rServerID, array('action' => 'kill_plex'));
+        }
+
+        return true;
 }
 
 function getPIDs($rServerID) {
@@ -3725,12 +3759,12 @@ function getStreamingServers() {
 				$rRow['server_name'] = 'Server #' . $rRow['id'];
 			}
 
-			$rRow['server_online'] = in_array($rRow['status'], array(1, 3)) && time() - $rRow['last_check_ago'] <= 90 || $rRow['is_main'];
-			if (!isset($rRow['order'])) {
-				$rRow['order'] = 0;
-			}
-			if ($rRow['server_online']) {
-				$rReturn[$rRow['id']] = $rRow;
+                        $rRow['server_online'] = !CoreUtilities::isHostOffline($rRow);
+                        if (!isset($rRow['order'])) {
+                                $rRow['order'] = 0;
+                        }
+                        if ($rRow['server_online']) {
+                                $rReturn[$rRow['id']] = $rRow;
 			}
 		}
 	}
@@ -3744,8 +3778,8 @@ function getAllServers() {
 
 	if ($db->num_rows() > 0) {
 		foreach ($db->get_rows() as $rRow) {
-			$rRow['server_online'] = in_array($rRow['status'], array(1, 3)) && time() - $rRow['last_check_ago'] <= 90 || $rRow['is_main'];
-			$rReturn[$rRow['id']] = $rRow;
+                        $rRow['server_online'] = !CoreUtilities::isHostOffline($rRow);
+                        $rReturn[$rRow['id']] = $rRow;
 		}
 	}
 
@@ -3765,10 +3799,10 @@ function getProxyServers($rOnline = false) {
 				$rRow['server_name'] = 'Proxy #' . $rRow['id'];
 			}
 
-			$rRow['server_online'] = in_array($rRow['status'], array(1, 3)) && time() - $rRow['last_check_ago'] <= 90 || $rRow['is_main'];
+                        $rRow['server_online'] = !CoreUtilities::isHostOffline($rRow);
 
 
-			if (!$rRow['server_online'] && $rOnline) {
+                        if (!$rRow['server_online'] && $rOnline) {
 			} else {
 				$rReturn[$rRow['id']] = $rRow;
 			}

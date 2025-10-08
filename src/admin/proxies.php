@@ -47,10 +47,11 @@ include 'header.php';
                             <tbody>
                                 <?php foreach (CoreUtilities::$rServers as $rServer) {
                                     if ($rServer['server_type'] == 1) {
+                                        $rIsOffline = CoreUtilities::isHostOffline($rServer);
                                         $rWatchDog = json_decode($rServer['watchdog_data'], true);
                                         $rWatchDog = is_array($rWatchDog) ? $rWatchDog : array('total_mem_used_percent' => 0, 'cpu' => 0);
 
-                                        if (!CoreUtilities::$rServers[$rServer['id']]['server_online']) {
+                                        if ($rIsOffline) {
                                             $rWatchDog['cpu'] = 0;
                                             $rWatchDog['total_mem_used_percent'] = 0;
                                         } ?>
@@ -58,10 +59,11 @@ include 'header.php';
                                             <td class="text-center"><?php echo $rServer['id']; ?></td>
                                             <td class="text-center">
                                                 <?php
+                                                $rIsOnline = !$rIsOffline;
                                                 if (!$rServer['enabled']) {
                                                     echo '<i class="text-secondary fas fa-square tooltip" title="Disabled"></i>';
                                                 } else {
-                                                    if ($rServer['server_online']) {
+                                                    if ($rIsOnline) {
                                                         echo '<i class="text-success fas fa-square tooltip" title="Online"></i>';
                                                     } else {
                                                         $rLastCheck = $rServer['last_check_ago'] > 0 ? date($rSettings['datetime_format'], $rServer['last_check_ago']) : 'Never';
@@ -104,7 +106,7 @@ include 'header.php';
                                                 <br /><small>of <?php echo number_format($rServer['total_clients'], 0); ?></small>
                                             </td>
                                             <td class="text-center">
-                                                <button type="button" class="btn btn-light btn-xs waves-effect waves-light"><?php echo number_format(($rServer['server_online'] ? $rServer['ping'] : 0), 0); ?> ms</button>
+                                                <button type="button" class="btn btn-light btn-xs waves-effect waves-light"><?php echo number_format(($rIsOnline ? $rServer['ping'] : 0), 0); ?> ms</button>
                                             </td>
                                             <td class="text-center">
                                                 <?php if (hasPermissions('adv', 'edit_server')) {

@@ -66,7 +66,15 @@ function normalizeIDList($rValue) {
 }
 
 function normalizeServerList($rValue) {
-        $rAllServers = array_keys((array) CoreUtilities::$rServers);
+        $rAllServers = array();
+
+        foreach ((array) CoreUtilities::$rServers as $rServerID => $rServerInfo) {
+                if (CoreUtilities::isHostOffline($rServerInfo)) {
+                        continue;
+                }
+
+                $rAllServers[] = $rServerID;
+        }
 
         if (!$rAllServers) {
                 return array();
@@ -81,9 +89,15 @@ function normalizeServerList($rValue) {
         $rAvailable = array();
 
         foreach ($rIDs as $rServerID) {
-                if (isset(CoreUtilities::$rServers[$rServerID])) {
-                        $rAvailable[] = $rServerID;
+                if (!isset(CoreUtilities::$rServers[$rServerID])) {
+                        continue;
                 }
+
+                if (CoreUtilities::isHostOffline(CoreUtilities::$rServers[$rServerID])) {
+                        continue;
+                }
+
+                $rAvailable[] = $rServerID;
         }
 
         return ($rAvailable ?: $rAllServers);
@@ -96,13 +110,18 @@ switch ($rAction) {
 				$rOutput = array();
 
                                 foreach ((array) CoreUtilities::$rServers as $rServerID => $rServerInfo) {
-                                        if (!isset($rServerInfo['server_name'], $rServerInfo['server_online'])) {
+                                        if (!isset($rServerInfo['server_name'])) {
                                                 continue;
                                         }
 
                                         $rHardware = (isset($rServerInfo['server_hardware']) ? json_decode($rServerInfo['server_hardware'], true) : null);
 
-                                        $rOutput[] = array('id' => $rServerID, 'server_name' => $rServerInfo['server_name'], 'online' => $rServerInfo['server_online'], 'info' => $rHardware);
+                                        $rOutput[] = array(
+                                                'id' => $rServerID,
+                                                'server_name' => $rServerInfo['server_name'],
+                                                'online' => !CoreUtilities::isHostOffline($rServerInfo),
+                                                'info' => $rHardware,
+                                        );
                                 }
 				echo json_encode($rOutput);
 
