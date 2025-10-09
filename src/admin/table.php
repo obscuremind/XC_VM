@@ -2749,9 +2749,9 @@ if ($rType == "lines") {
                     $rWhere[] = "(SELECT COUNT(*) AS `count` FROM `streams_logs` WHERE `streams_logs`.`action` = 'STREAM_FAILED' AND `streams_logs`.`date` >= UNIX_TIMESTAMP()-86400 AND `streams_logs`.`stream_id` = `streams`.`id` AND `streams_logs`.`server_id` = `streams_servers`.`server_id`) > 144";
                 }
             } elseif (CoreUtilities::$rRequest["filter"] == 9) {
-                $rWhere[] = "LENGTH(`streams`.`channel_id`) > 0";
+                $rWhere[] = "((`streams`.`epg_id` IS NOT NULL AND `streams`.`epg_id` > 0) OR TRIM(COALESCE(`streams`.`channel_id`, '')) <> '')";
             } elseif (CoreUtilities::$rRequest["filter"] == 10) {
-                $rWhere[] = "(`streams`.`channel_id` IS NULL OR LENGTH(`streams`.`channel_id`) = 0)";
+                $rWhere[] = "((`streams`.`epg_id` IS NULL OR `streams`.`epg_id` = 0) AND TRIM(COALESCE(`streams`.`channel_id`, '')) = '')";
             } elseif (CoreUtilities::$rRequest["filter"] == 11) {
                 $rWhere[] = "`streams`.`adaptive_link` IS NOT NULL";
             } elseif (CoreUtilities::$rRequest["filter"] == 12) {
