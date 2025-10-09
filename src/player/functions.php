@@ -889,16 +889,20 @@ class CoreUtilities {
 			}
 		}
 
-		if ($rPicking['filter']) {
-			switch ($rPicking['filter']) {
-				case 'all':
-					break;
+                if ($rPicking['filter']) {
+                        switch ($rPicking['filter']) {
+                                case 'all':
+                                        break;
 
-				case 'timeshift':
-					$rWhere[] = '`tv_archive_duration` > 0 AND `tv_archive_server_id` > 0';
-					break;
-			}
-		}
+                                case 'timeshift':
+                                        $rWhere[] = '`tv_archive_duration` > 0 AND `tv_archive_server_id` > 0';
+                                        break;
+
+                                case 'epg':
+                                        $rWhere[] = "((`epg_id` IS NOT NULL AND `epg_id` > 0) OR TRIM(COALESCE(`channel_id`, '')) <> '')";
+                                        break;
+                        }
+                }
 		$rChannels = self::sortChannels($rChannels);
 
 		if (empty($rFav)) {

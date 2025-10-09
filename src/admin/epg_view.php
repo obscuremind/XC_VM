@@ -16,7 +16,7 @@ $rPageInt = max(intval(CoreUtilities::$rRequest['page']), 1);
 $rLimit = max(intval(CoreUtilities::$rRequest['entries']), CoreUtilities::$rSettings['default_entries']);
 $rStart = ($rPageInt - 1) * $rLimit;
 $rWhere = $rWhereV = array();
-$rWhere[] = '`type` = 1 AND `epg_id` IS NOT NULL AND `channel_id` IS NOT NULL';
+$rWhere[] = "`type` = 1 AND `epg_id` IS NOT NULL AND `epg_id` > 0 AND TRIM(COALESCE(`channel_id`, '')) <> ''";
 
 if (isset(CoreUtilities::$rRequest['category']) && intval(CoreUtilities::$rRequest['category']) > 0) {
     $rWhere[] = "JSON_CONTAINS(`category_id`, ?, '\$')";
